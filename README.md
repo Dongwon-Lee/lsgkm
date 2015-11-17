@@ -151,7 +151,7 @@ Here, you will try to score the positive and the negative test sequences. Type:
 
 You need to generate all possible non-redundant *k*-mers using the Python script
 `scripts/nrkmers.py`.  Then, you score them using `gkmpredict` as described above. 
-The output of `lgkmpredict` can be directly used by the deltaSVM script deltasvm.pl`
+The output of `lgkmpredict` can be directly used by the deltaSVM script `deltasvm.pl`
 available from our deltasvm website.
 
 Please email Dongwon Lee (dwlee AT jhu DOT edu) if you have any questions.
