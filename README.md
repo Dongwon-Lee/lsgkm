@@ -2,7 +2,7 @@
 
 gkm-SVM, a sequence-based method for predicting regulatory DNA elements,
 is a useful tool for studying gene regulatory mechanisms.
-In continuous efforts to improve the method, new software, LS-GKM,
+In continuous efforts to improve the method, new software, `LS-GKM`,
 is introduced.  It offers much better scalability and provides further
 advanced gapped *k*-mer based kernel functions.  As a result, LS-GKM
 achieves considerably higher accuracy than the original gkm-SVM.
@@ -20,7 +20,6 @@ achieves considerably higher accuracy than the original gkm-SVM.
 
 After downloading and extracting the source codes, type:
 
-    $ cd lsgkm 
     $ cd src
     $ make 
 
@@ -30,19 +29,19 @@ If successful, You should be able to find the following executables in the curre
     gkmpredict
     gkmmatrix (not used)
 
-**make install** will copy these three executables to the ../bin direcory
+`make install` will simply copy these three executables to the `../bin` direcory
 
 
 ### Tutorial
 
-We introduce the users to the basic workflow of **LS-GKM**.  Please refer to help messages 
+We introduce the users to the basic workflow of `LS-GKM`.  Please refer to help messages 
 for more detailed information of each program.  You can access to it by running the programs 
 without any argument/parameter.
   
 
-#### Training of gkm-SVM
+#### Training of LS-GKM
 
-You train a SVM classifier using **gkmtrain**. It takes three arguments; 
+You train a SVM classifier using `gkmtrain`. It takes three arguments; 
 positive sequence file, negative sequence file, and prefix of output.
 
 
@@ -94,34 +93,34 @@ positive sequence file, negative sequence file, and prefix of output.
                      (default: 1)
 
 
-First try to train a model using simple test files. Type the following command in *tests/* directory:
+First try to train a model using simple test files. Type the following command in `tests/` directory:
 
     $ ../bin/gkmtrain wgEncodeSydhTfbsGm12878Nfe2hStdAlnRep0.tr.fa wgEncodeSydhTfbsGm12878Nfe2hStdAlnRep0.neg.tr.fa test_gkmtrain
 
-It will generate *test_gkmtrain.model.txt*, which will then be used for scoring of 
-any DNA sequences as described below.  This result should be the same as *wgEncodeSydhTfbsGm12878Nfe2hStdAlnRep0.model.txt*
+It will generate `test_gkmtrain.model.txt`, which will then be used for scoring of 
+any DNA sequences as described below.  This result should be the same as `wgEncodeSydhTfbsGm12878Nfe2hStdAlnRep0.model.txt`
 
-You can also perform cross-validation (CV) analysis with -x <N> option. For example,
+You can also perform cross-validation (CV) analysis with `-x <N>` option. For example,
 the following command will perform 5-fold CV. 
 
     $ ../bin/gkmtrain -x 5 wgEncodeSydhTfbsGm12878Nfe2hStdAlnRep0.tr.fa wgEncodeSydhTfbsGm12878Nfe2hStdAlnRep0.neg.tr.fa test_gkmtrain
 
-The result will be stored in *test_gkmtrain.cvpred.txt*, and this should be the same as 
-*wgEncodeSydhTfbsGm12878Nfe2hStdAlnRep0.cvpred.txt*
+The result will be stored in `test_gkmtrain.cvpred.txt`, and this should be the same as 
+`wgEncodeSydhTfbsGm12878Nfe2hStdAlnRep0.cvpred.txt`
 
-Please note that it will run SVM training <N> times, which can take time if training 
+Please note that it will run SVM training *N* times, which can take time if training 
 sets are large.  In this case, you can perform CV analysis on a specific set 
-by using -i option for parallel runnings. The output will be <outprefix>.cvpred.<I>.txt
+by using `-i <I>` option for parallel runnings. The output will be `<outprefix>.cvpred.<I>.txt`
 
 The format of the cvpred file is as follows:
   
-[sequenceid] [SVM score] [label] [CV-set]
-...
+    [sequenceid] [SVM score] [label] [CV-set]
+    ...
 
 
 #### Scoring DNA sequence using gkm-SVM
 
-You use **gkmpredict** to score any set of sequences.
+You use `gkmpredict` to score any set of sequences.
 
     Usage: gkmpredict [options] <test_seqfile> <model_file> <output_file>
 
@@ -151,8 +150,8 @@ Here, you will try to score the positive and the negative test sequences. Type:
 #### Generating weight files for deltaSVM
 
 You need to generate all possible non-redundant *k*-mers using the Python script
-**scripts/nrkmers.py**.  Then, you score them using **gkmpredict** as described above. 
-The output of **gkmpredict** can be directly used by the deltaSVM script **deltasvm.pl**
+`scripts/nrkmers.py`.  Then, you score them using `gkmpredict` as described above. 
+The output of `lgkmpredict` can be directly used by the deltaSVM script deltasvm.pl`
 available from our deltasvm website.
 
 Please email Dongwon Lee (dwlee AT jhu DOT edu) if you have any questions.
