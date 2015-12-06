@@ -67,7 +67,7 @@ typedef struct _kmertree_dfs_pthread_t {
     KmerTree *tree;
     int start_depth;
     int start_node_index;
-    BaseMismatchCount matching_bases[MAX_SEQ_LENGTH*2];
+    BaseMismatchCount matching_bases[MAX_SEQ_LENGTH];
     int num_matching_bases;
     int **mmprofile;
     int last_seqid;
@@ -76,7 +76,7 @@ typedef struct _kmertree_dfs_pthread_t {
 typedef struct _kmertreecoef_dfs_pthread_t{
     int start_depth;
     int start_node_index;
-    BaseMismatchCount matching_bases[MAX_SEQ_LENGTH*2];
+    BaseMismatchCount matching_bases[MAX_SEQ_LENGTH];
     int num_matching_bases;
     double result;
 } kmertreecoef_dfs_pthread_t;
@@ -439,7 +439,7 @@ static void kmertree_dfs(const KmerTree *tree, const int last_seqid, const int d
         for (bid=1; bid<=MAX_ALPHABET_SIZE; bid++) {
             daughter_node_index++;
             if (tree->node[daughter_node_index] > 0) {
-                BaseMismatchCount next_matching_bases[MAX_SEQ_LENGTH*2];
+                BaseMismatchCount next_matching_bases[MAX_SEQ_LENGTH];
                 int next_num_matching_bases = 0;
 
                 for (j=0; j<curr_num_matching_bases; j++) {
@@ -495,8 +495,6 @@ static void kmertree_cleanup(const KmerTree *tree, int depth, int curr_node_inde
 static void kmertree_dfs_pthread_init_par4(const gkm_data *da, const int last_index, KmerTree *tree, kmertree_dfs_pthread_t *td)
 {
     int i, j, k;
-    uint8_t *seqs[2] = {da->seq, da->seq_rc};
-    uint8_t *wts[2] = {da->wt, da->wt_rc};
 
     //process the first level and initialize thread input & output variables
     for (i=0; i<MAX_ALPHABET_SIZE; i++) {
@@ -508,19 +506,17 @@ static void kmertree_dfs_pthread_init_par4(const gkm_data *da, const int last_in
         td[i].num_matching_bases = 0;
         td[i].last_seqid = last_index;
 
-        for (k=0; k<2; k++) {
-            uint8_t *seq = seqs[k];
-            uint8_t *wt = wts[k];
-            for (j=0; j<da->seqlen - g_param->L + 1; j++) {
-                int mmcnt = 0;
-                uint8_t *currbase_ptr = seq + j;
-                if (*currbase_ptr != bid) mmcnt++;
-                if (mmcnt <= g_param->d) {
-                    td[i].matching_bases[td[i].num_matching_bases].bid = currbase_ptr + 1;
-                    td[i].matching_bases[td[i].num_matching_bases].wt = wt[j];
-                    td[i].matching_bases[td[i].num_matching_bases].mmcnt = mmcnt;
-                    td[i].num_matching_bases++;
-                }
+        uint8_t *seq = da->seq;
+        uint8_t *wt = da->wt;
+        for (j=0; j<da->seqlen - g_param->L + 1; j++) {
+            int mmcnt = 0;
+            uint8_t *currbase_ptr = seq + j;
+            if (*currbase_ptr != bid) mmcnt++;
+            if (mmcnt <= g_param->d) {
+                td[i].matching_bases[td[i].num_matching_bases].bid = currbase_ptr + 1;
+                td[i].matching_bases[td[i].num_matching_bases].wt = wt[j];
+                td[i].matching_bases[td[i].num_matching_bases].mmcnt = mmcnt;
+                td[i].num_matching_bases++;
             }
         }
 
@@ -536,8 +532,6 @@ static void kmertree_dfs_pthread_init_par4(const gkm_data *da, const int last_in
 static void kmertree_dfs_pthread_init_par16(const gkm_data *da, const int last_index, KmerTree *tree, kmertree_dfs_pthread_t *td)
 {
     int i, j, k;
-    uint8_t *seqs[2] = {da->seq, da->seq_rc};
-    uint8_t *wts[2] = {da->wt, da->wt_rc};
     const int d = g_param->d;
 
     //process the first TWO level and initialize thread input & output variables
@@ -551,21 +545,19 @@ static void kmertree_dfs_pthread_init_par16(const gkm_data *da, const int last_i
         td[i].num_matching_bases = 0;
         td[i].last_seqid = last_index;
 
-        for (k=0; k<2; k++) {
-            uint8_t *seq = seqs[k];
-            uint8_t *wt = wts[k];
-            for (j=0; j<da->seqlen - g_param->L + 1; j++) {
-                int mmcnt = 0;
-                uint8_t *base_ptr1 = seq + j;
-                uint8_t *base_ptr2 = base_ptr1 + 1;
-                if (*base_ptr1 != bid1) mmcnt++;
-                if (*base_ptr2 != bid2) mmcnt++;
-                if (mmcnt <= d) {
-                    td[i].matching_bases[td[i].num_matching_bases].bid = base_ptr2 + 1;
-                    td[i].matching_bases[td[i].num_matching_bases].wt = wt[j];
-                    td[i].matching_bases[td[i].num_matching_bases].mmcnt = mmcnt;
-                    td[i].num_matching_bases++;
-                }
+        uint8_t *seq = da->seq;
+        uint8_t *wt = da->wt;
+        for (j=0; j<da->seqlen - g_param->L + 1; j++) {
+            int mmcnt = 0;
+            uint8_t *base_ptr1 = seq + j;
+            uint8_t *base_ptr2 = base_ptr1 + 1;
+            if (*base_ptr1 != bid1) mmcnt++;
+            if (*base_ptr2 != bid2) mmcnt++;
+            if (mmcnt <= d) {
+                td[i].matching_bases[td[i].num_matching_bases].bid = base_ptr2 + 1;
+                td[i].matching_bases[td[i].num_matching_bases].wt = wt[j];
+                td[i].matching_bases[td[i].num_matching_bases].mmcnt = mmcnt;
+                td[i].num_matching_bases++;
             }
         }
 
@@ -629,6 +621,7 @@ static void kmertree_dfs_pthread_process(kmertree_dfs_pthread_t *td, const int n
         }
         free(td[i].mmprofile);
     }
+
 }
 
 /**************************
@@ -681,7 +674,7 @@ static double kmertreecoef_dfs(const KmerTreeCoef *tree, const int depth, const 
         int daughter_node_index = (curr_node_index*MAX_ALPHABET_SIZE);
         for (bid=1; bid<=MAX_ALPHABET_SIZE; bid++) {
             daughter_node_index++;
-            BaseMismatchCount next_matching_bases[MAX_SEQ_LENGTH*2];
+            BaseMismatchCount next_matching_bases[MAX_SEQ_LENGTH];
             int next_num_matching_bases = 0;
             for (j=0; j<curr_num_matching_bases; j++) {
                 uint8_t *currbase_ptr = curr_matching_bases[j].bid;
@@ -712,27 +705,21 @@ static double kmertreecoef_dfs(const KmerTreeCoef *tree, const int depth, const 
 static double kmertreecoef_dfs_single(const gkm_data *da)
 {
     int i;
-    BaseMismatchCount matching_bases[MAX_SEQ_LENGTH*2];
+    BaseMismatchCount matching_bases[MAX_SEQ_LENGTH];
     int num_matching_bases = da->seqlen - g_param->L + 1;
 
     for (i=0; i<num_matching_bases; i++) {
         matching_bases[i].bid = da->seq + i;
         matching_bases[i].wt = da->wt[i];
         matching_bases[i].mmcnt = 0;
-        matching_bases[num_matching_bases+i].bid = da->seq_rc + i;
-        matching_bases[num_matching_bases+i].wt = da->wt_rc[i];
-        matching_bases[num_matching_bases+i].mmcnt = 0;
     }
-    num_matching_bases *= 2;
 
     return kmertreecoef_dfs(g_sv_kmertreecoef, 0, 0, matching_bases, num_matching_bases);
 }
 
 static void kmertreecoef_dfs_pthread_init_par4(const gkm_data *da, kmertreecoef_dfs_pthread_t *td)
 {
-    int i, j, k;
-    uint8_t *seqs[2] = {da->seq, da->seq_rc};
-    uint8_t *wts[2] = {da->wt, da->wt_rc};
+    int i, j;
     const int d= g_param->d;
 
     //process the first level and initialize thread input & output variables
@@ -743,19 +730,17 @@ static void kmertreecoef_dfs_pthread_init_par4(const gkm_data *da, kmertreecoef_
         td[i].start_node_index = bid;
         td[i].num_matching_bases = 0;
 
-        for (k=0; k<2; k++) {
-            uint8_t *seq = seqs[k];
-            uint8_t *wt = wts[k];
-            for (j=0; j<da->seqlen - g_param->L + 1; j++) {
-                int mmcnt = 0;
-                uint8_t *currbase_ptr = seq + j;
-                if (*currbase_ptr != bid) mmcnt++;
-                if (mmcnt <= d) {
-                    td[i].matching_bases[td[i].num_matching_bases].bid = currbase_ptr + 1;
-                    td[i].matching_bases[td[i].num_matching_bases].wt = wt[j];
-                    td[i].matching_bases[td[i].num_matching_bases].mmcnt = mmcnt;
-                    td[i].num_matching_bases++;
-                }
+        uint8_t *seq = da->seq;
+        uint8_t *wt = da->wt;
+        for (j=0; j<da->seqlen - g_param->L + 1; j++) {
+            int mmcnt = 0;
+            uint8_t *currbase_ptr = seq + j;
+            if (*currbase_ptr != bid) mmcnt++;
+            if (mmcnt <= d) {
+                td[i].matching_bases[td[i].num_matching_bases].bid = currbase_ptr + 1;
+                td[i].matching_bases[td[i].num_matching_bases].wt = wt[j];
+                td[i].matching_bases[td[i].num_matching_bases].mmcnt = mmcnt;
+                td[i].num_matching_bases++;
             }
         }
 
@@ -766,9 +751,7 @@ static void kmertreecoef_dfs_pthread_init_par4(const gkm_data *da, kmertreecoef_
 
 static void kmertreecoef_dfs_pthread_init_par16(const gkm_data *da, kmertreecoef_dfs_pthread_t *td)
 {
-    int i, j, k;
-    uint8_t *seqs[2] = {da->seq, da->seq_rc};
-    uint8_t *wts[2] = {da->wt, da->wt_rc};
+    int i, j;
     const int d = g_param->d;
 
     //process the first TWO level and initialize thread input & output variables
@@ -780,21 +763,19 @@ static void kmertreecoef_dfs_pthread_init_par16(const gkm_data *da, kmertreecoef
         td[i].start_node_index = MAX_ALPHABET_SIZE + i + 1;
         td[i].num_matching_bases = 0;
 
-        for (k=0; k<2; k++) {
-            uint8_t *seq = seqs[k];
-            uint8_t *wt = wts[k];
-            for (j=0; j<da->seqlen - g_param->L + 1; j++) {
-                int mmcnt = 0;
-                uint8_t *base_ptr1 = seq + j;
-                uint8_t *base_ptr2 = base_ptr1 + 1;
-                if (*base_ptr1 != bid1) mmcnt++;
-                if (*base_ptr2 != bid2) mmcnt++;
-                if (mmcnt <= d) {
-                    td[i].matching_bases[td[i].num_matching_bases].bid = base_ptr2 + 1;
-                    td[i].matching_bases[td[i].num_matching_bases].wt = wt[j];
-                    td[i].matching_bases[td[i].num_matching_bases].mmcnt = mmcnt;
-                    td[i].num_matching_bases++;
-                }
+        uint8_t *seq = da->seq;
+        uint8_t *wt = da->wt;
+        for (j=0; j<da->seqlen - g_param->L + 1; j++) {
+            int mmcnt = 0;
+            uint8_t *base_ptr1 = seq + j;
+            uint8_t *base_ptr2 = base_ptr1 + 1;
+            if (*base_ptr1 != bid1) mmcnt++;
+            if (*base_ptr2 != bid2) mmcnt++;
+            if (mmcnt <= d) {
+                td[i].matching_bases[td[i].num_matching_bases].bid = base_ptr2 + 1;
+                td[i].matching_bases[td[i].num_matching_bases].wt = wt[j];
+                td[i].matching_bases[td[i].num_matching_bases].mmcnt = mmcnt;
+                td[i].num_matching_bases++;
             }
         }
 
@@ -873,7 +854,7 @@ static double kmertreecoef_dfs_par16(const gkm_data *da)
 static void gkmkernel_kernelfunc_batch_single(const gkm_data *da, int n, double *res) 
 {
     int i, j, k;
-    BaseMismatchCount matching_bases[MAX_SEQ_LENGTH*2];
+    BaseMismatchCount matching_bases[MAX_SEQ_LENGTH];
     int num_matching_bases = da->seqlen - g_param->L + 1;
     const int d = g_param->d;
 
@@ -881,11 +862,7 @@ static void gkmkernel_kernelfunc_batch_single(const gkm_data *da, int n, double 
         matching_bases[i].bid = da->seq + i;
         matching_bases[i].wt = da->wt[i];
         matching_bases[i].mmcnt = 0;
-        matching_bases[num_matching_bases+i].bid = da->seq_rc + i;
-        matching_bases[num_matching_bases+i].wt = da->wt_rc[i];
-        matching_bases[num_matching_bases+i].mmcnt = 0;
     }
-    num_matching_bases *= 2;
 
     int **mmprofile = (int **) malloc(sizeof(int*) * ((size_t) (d+1)));
     for (k=0; k<=d; k++) {
@@ -911,7 +888,7 @@ static void gkmkernel_kernelfunc_batch_single(const gkm_data *da, int n, double 
 static void gkmkernel_kernelfunc_batch_single_all(const gkm_data *da, KmerTree *tree, const int start, const int end, double *res) 
 {
     int i, j, k;
-    BaseMismatchCount matching_bases[MAX_SEQ_LENGTH*2];
+    BaseMismatchCount matching_bases[MAX_SEQ_LENGTH];
     int num_matching_bases = da->seqlen - g_param->L + 1;
     const int d = g_param->d;
 
@@ -919,11 +896,7 @@ static void gkmkernel_kernelfunc_batch_single_all(const gkm_data *da, KmerTree *
         matching_bases[i].bid = da->seq + i;
         matching_bases[i].wt = da->wt[i];
         matching_bases[i].mmcnt = 0;
-        matching_bases[num_matching_bases+i].bid = da->seq_rc + i;
-        matching_bases[num_matching_bases+i].wt = da->wt_rc[i];
-        matching_bases[num_matching_bases+i].mmcnt = 0;
     }
-    num_matching_bases *= 2;
 
     /* initialize mmprofile*/
     int **mmprofile = (int **) malloc(sizeof(int*) * ((size_t) (g_param->d+1)));

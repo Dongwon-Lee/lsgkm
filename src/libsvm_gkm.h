@@ -25,7 +25,7 @@
 #include "libsvm.h"
 
 #define MAX_ALPHABET_SIZE 4 /* base ACGT, DON'T CHANGE THIS PARAMETER! */
-#define MAX_SEQ_LENGTH 1024
+#define MAX_SEQ_LENGTH 2048
 
 #ifdef __cplusplus 
 extern "C" {
