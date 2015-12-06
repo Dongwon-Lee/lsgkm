@@ -851,41 +851,7 @@ static double kmertreecoef_dfs_par16(const gkm_data *da)
 /***************************************
  * gkmkernel internal kernel functions *
  ***************************************/
-static void gkmkernel_kernelfunc_batch_single(const gkm_data *da, int n, double *res) 
-{
-    int i, j, k;
-    BaseMismatchCount matching_bases[MAX_SEQ_LENGTH];
-    int num_matching_bases = da->seqlen - g_param->L + 1;
-    const int d = g_param->d;
-
-    for (i=0; i<num_matching_bases; i++) {
-        matching_bases[i].bid = da->seq + i;
-        matching_bases[i].wt = da->wt[i];
-        matching_bases[i].mmcnt = 0;
-    }
-
-    int **mmprofile = (int **) malloc(sizeof(int*) * ((size_t) (d+1)));
-    for (k=0; k<=d; k++) {
-        mmprofile[k] = (int *) malloc(sizeof(int)* ((size_t) n));
-        for(j=0; j<n; j++) { mmprofile[k][j] = 0; }
-    }
-
-    kmertree_dfs(g_kmertree, n, 0, 0, matching_bases, num_matching_bases, mmprofile);
-
-    for (j=0; j<n; j++) {
-        res[j] = 0;
-        for (k=0; k<=d; k++) {
-            res[j] += (g_weights[k] * mmprofile[k][j]);
-        }
-    }
-
-    for (k=0; k<=d; k++) {
-        free(mmprofile[k]);
-    }
-    free(mmprofile);
-}
-
-static void gkmkernel_kernelfunc_batch_single_all(const gkm_data *da, KmerTree *tree, const int start, const int end, double *res) 
+static void gkmkernel_kernelfunc_batch_single(const gkm_data *da, KmerTree *tree, const int start, const int end, double *res) 
 {
     int i, j, k;
     BaseMismatchCount matching_bases[MAX_SEQ_LENGTH];
@@ -899,8 +865,8 @@ static void gkmkernel_kernelfunc_batch_single_all(const gkm_data *da, KmerTree *
     }
 
     /* initialize mmprofile*/
-    int **mmprofile = (int **) malloc(sizeof(int*) * ((size_t) (g_param->d+1)));
-    for (k=0; k<=g_param->d; k++) {
+    int **mmprofile = (int **) malloc(sizeof(int*) * ((size_t) (d+1)));
+    for (k=0; k<=d; k++) {
         mmprofile[k] = (int *) malloc(sizeof(int)* ((size_t) end));
         for(j=0; j<end; j++) { mmprofile[k][j] = 0; }
     }
@@ -922,25 +888,7 @@ static void gkmkernel_kernelfunc_batch_single_all(const gkm_data *da, KmerTree *
     free(mmprofile);
 }
 
-static void gkmkernel_kernelfunc_batch_par4(const gkm_data *da, int n, double *res) 
-{
-    kmertree_dfs_pthread_t td[MAX_ALPHABET_SIZE];
-
-    kmertree_dfs_pthread_init_par4(da, n, g_kmertree, td);
-
-    kmertree_dfs_pthread_process(td, MAX_ALPHABET_SIZE, 0, n, res);
-}
-
-static void gkmkernel_kernelfunc_batch_par16(const gkm_data *da, int n, double *res) 
-{
-    kmertree_dfs_pthread_t td[MAX_ALPHABET_SIZE*MAX_ALPHABET_SIZE];
-
-    kmertree_dfs_pthread_init_par16(da, n, g_kmertree, td);
-
-    kmertree_dfs_pthread_process(td, MAX_ALPHABET_SIZE*MAX_ALPHABET_SIZE, 0, n, res);
-}
-
-static void gkmkernel_kernelfunc_batch_par4_all(const gkm_data *da, KmerTree *tree, const int start, const int end, double *res)
+static void gkmkernel_kernelfunc_batch_par4(const gkm_data *da, KmerTree *tree, const int start, const int end, double *res)
 {
     kmertree_dfs_pthread_t td[MAX_ALPHABET_SIZE];
 
@@ -949,7 +897,7 @@ static void gkmkernel_kernelfunc_batch_par4_all(const gkm_data *da, KmerTree *tr
     kmertree_dfs_pthread_process(td, MAX_ALPHABET_SIZE, start, end, res);
 }
 
-static void gkmkernel_kernelfunc_batch_par16_all(const gkm_data *da, KmerTree *tree, int start, int end, double *res)
+static void gkmkernel_kernelfunc_batch_par16(const gkm_data *da, KmerTree *tree, int start, int end, double *res)
 {
     kmertree_dfs_pthread_t td[MAX_ALPHABET_SIZE*MAX_ALPHABET_SIZE];
 
@@ -958,23 +906,19 @@ static void gkmkernel_kernelfunc_batch_par16_all(const gkm_data *da, KmerTree *t
     kmertree_dfs_pthread_process(td, MAX_ALPHABET_SIZE*MAX_ALPHABET_SIZE, start, end, res);
 }
 
+//function pointer for the three batch kernel functions
+// gkmkernel_kernelfunc_batch_single
+// gkmkernel_kernelfunc_batch_par4
+// gkmkernel_kernelfunc_batch_par16
+static void (*gkmkernel_kernelfunc_batch_ptr)(const gkm_data *da, KmerTree *tree, int start, int end, double *res) = gkmkernel_kernelfunc_batch_single;
+
 static double gkmkernel_kernelfunc_raw(const gkm_data *da, const gkm_data *db)
 {
     double res = 0;
 
     kmertree_add_sequence(g_kmertree, 0, db);
 
-    if (g_param_nthreads == 1) {
-        gkmkernel_kernelfunc_batch_single(da, 1, &res);
-    } else if (g_param_nthreads == 4) {
-        gkmkernel_kernelfunc_batch_par4(da, 1, &res);
-    } else if (g_param_nthreads == 16) {
-        gkmkernel_kernelfunc_batch_par16(da, 1, &res);
-    } else {
-        clog_warn(CLOG(LOGGER_ID), "Supported number of threads are 1, 4 and 16. nthread is set to 1");
-        g_param_nthreads = 1;
-        gkmkernel_kernelfunc_batch_single(da, 1, &res);
-    }
+    gkmkernel_kernelfunc_batch_ptr(da, g_kmertree, 0, 1, &res);
 
     kmertree_cleanup(g_kmertree, 0, 0);
 
@@ -1360,17 +1304,7 @@ double* gkmkernel_kernelfunc_batch(const gkm_data *da, const union svm_data *db_
     //initialize result variable
     for (j=0; j<n; j++) { res[j] = 0; }
 
-    if (g_param_nthreads == 1) {
-        gkmkernel_kernelfunc_batch_single(da, n, res);
-    } else if (g_param_nthreads == 4) {
-        gkmkernel_kernelfunc_batch_par4(da, n, res);
-    } else if (g_param_nthreads == 16) {
-        gkmkernel_kernelfunc_batch_par16(da, n, res);
-    } else {
-        clog_warn(CLOG(LOGGER_ID), "Supported number of threads are 1, 4 and 16. nthread is set to 1");
-        g_param_nthreads = 1;
-        gkmkernel_kernelfunc_batch_single(da, n, res);
-    }
+    gkmkernel_kernelfunc_batch_ptr(da, g_kmertree, 0, n, res);
 
     //normalization
     double da_sqnorm = da->sqnorm;
@@ -1405,18 +1339,7 @@ double* gkmkernel_kernelfunc_batch_all(const int a, const int start, const int e
     //initialize result variable
     for (j=0; j<end-start; j++) { res[j] = 0; }
 
-    if (g_param_nthreads == 1) {
-        gkmkernel_kernelfunc_batch_single_all(da, g_prob_kmertree, start, end, res);
-    } else if (g_param_nthreads == 4) {
-        gkmkernel_kernelfunc_batch_par4_all(da, g_prob_kmertree, start, end, res);
-    } else if (g_param_nthreads == 16) {
-        gkmkernel_kernelfunc_batch_par16_all(da, g_prob_kmertree, start, end, res);
-    }
-    else {
-        clog_warn(CLOG(LOGGER_ID), "Supported number of threads are 1, 4 and 16. nthread is set to 1");
-        g_param_nthreads = 1;
-        gkmkernel_kernelfunc_batch_single_all(da, g_prob_kmertree, start, end, res);
-    }
+    gkmkernel_kernelfunc_batch_ptr(da, g_prob_kmertree, start, end, res);
 
     //normalization
     double da_sqnorm = da->sqnorm;
@@ -1454,18 +1377,7 @@ double* gkmkernel_kernelfunc_batch_sv(const gkm_data *da, double *res)
     //initialize results
     for (j=0; j<g_sv_num; j++) { res[j] = 0; }
 
-    if (g_param_nthreads == 1) {
-        gkmkernel_kernelfunc_batch_single_all(da, g_sv_kmertree, 0, g_sv_num, res);
-    } else if (g_param_nthreads == 4) {
-        gkmkernel_kernelfunc_batch_par4_all(da, g_sv_kmertree, 0, g_sv_num, res);
-    } else if (g_param_nthreads == 16) {
-        gkmkernel_kernelfunc_batch_par16_all(da, g_sv_kmertree, 0, g_sv_num, res);
-    }
-    else {
-        clog_warn(CLOG(LOGGER_ID), "Supported number of threads are 1, 4 and 16. nthread is set to 1");
-        g_param_nthreads = 1;
-        gkmkernel_kernelfunc_batch_single_all(da, g_sv_kmertree, 0, g_sv_num, res);
-    }
+    gkmkernel_kernelfunc_batch_ptr(da, g_sv_kmertree, 0, g_sv_num, res);
 
     //normalization
     double da_sqnorm = da->sqnorm;
@@ -1518,11 +1430,19 @@ double gkmkernel_predict(const gkm_data *d)
 
 void gkmkernel_set_num_threads(int n)
 {
-    if ((n == 1) || (n == 4) || (n == 16)) {
-        clog_info(CLOG(LOGGER_ID), "Number of threads is set to %d", n);
-        g_param_nthreads = n;
+    g_param_nthreads = n;
+
+    clog_info(CLOG(LOGGER_ID), "Number of threads is set to %d", n);
+
+    if (g_param_nthreads == 1) {
+        gkmkernel_kernelfunc_batch_ptr = gkmkernel_kernelfunc_batch_single;
+    } else if (g_param_nthreads == 4) {
+        gkmkernel_kernelfunc_batch_ptr = gkmkernel_kernelfunc_batch_par4;
+    } else if (g_param_nthreads == 16) {
+        gkmkernel_kernelfunc_batch_ptr = gkmkernel_kernelfunc_batch_par16;
     } else {
         clog_warn(CLOG(LOGGER_ID), "Supported number of threads are 1, 4 and 16. nthread is set to 1");
         g_param_nthreads = 1;
+        gkmkernel_kernelfunc_batch_ptr = gkmkernel_kernelfunc_batch_single;
     }
 }
