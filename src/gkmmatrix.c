@@ -1,4 +1,4 @@
-/* gkmtrain.c
+/* gkmmatrix.c
  *
  * Copyright (C) 2015 Dongwon Lee
  *
@@ -16,6 +16,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
+
+// Notes:
+// gkmmatrix is mainly used for debug
 
 #include <stdio.h>
 #include <stdlib.h>

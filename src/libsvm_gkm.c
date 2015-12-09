@@ -53,7 +53,6 @@ static int *g_prob_libsvm_index = NULL;
 static KmerTree *g_sv_kmertree = NULL;
 static union svm_data *g_sv_svm_data = NULL;
 static int g_sv_num = 0;
-static int **g_sv_mmprofile = NULL;
 
 static KmerTreeCoef *g_sv_kmertreecoef = NULL;
 
@@ -1155,12 +1154,6 @@ void gkmkernel_init_sv(union svm_data *sv, double *coef, int nclass, int n)
         kmertree_add_sequence(g_sv_kmertree, j, sv[j].d);
     }
 
-    g_sv_mmprofile = (int **) malloc(sizeof(int*) * ((size_t) (g_param->d+1)));
-    for (i=0; i<=g_param->d; i++) {
-        g_sv_mmprofile[i] = (int *) malloc(sizeof(int) * ((size_t) n));
-        for(j=0; j<n; j++) { g_sv_mmprofile[i][j] = 0; }
-    }
-
     //speed-up for linear cases
     if ((nclass == 2) && (g_param->kernel_type != EST_TRUNC_RBF) && (g_param->kernel_type != EST_TRUNC_PW_RBF)) {
         g_sv_kmertreecoef = (KmerTreeCoef *) malloc(sizeof(KmerTreeCoef));
@@ -1190,17 +1183,8 @@ void gkmkernel_destroy_sv()
     kmertree_destroy(g_sv_kmertree);
     kmertreecoef_destroy(g_sv_kmertreecoef);
 
-    if (g_sv_mmprofile) {
-        int i;
-        for (i=0; i<=g_param->d; i++) {
-            free(g_sv_mmprofile[i]);
-        }
-        free(g_sv_mmprofile);
-    }
-
     g_sv_kmertree = NULL;
     g_sv_kmertreecoef = NULL;
-    g_sv_mmprofile = NULL;
     g_sv_svm_data = NULL;
     g_sv_num = 0;
 }
@@ -1368,9 +1352,8 @@ double* gkmkernel_kernelfunc_batch_sv(const gkm_data *da, double *res)
         return NULL;
     }
 
-    int i, j;
+    int j;
     struct timeval time_start, time_end;
-    const int d = g_param->d;
 
     gettimeofday(&time_start, NULL);
 
@@ -1390,11 +1373,6 @@ double* gkmkernel_kernelfunc_batch_sv(const gkm_data *da, double *res)
         for (j=0; j<g_sv_num; j++) {
             res[j] = exp(g_param->gamma*(res[j]-1));
         }
-    }
-
-    //reset mismatch profiles
-    for (i=0; i<=d; i++) {
-        for(j=0; j<g_sv_num; j++) { g_sv_mmprofile[i][j] = 0; }
     }
 
     gettimeofday(&time_end, NULL);

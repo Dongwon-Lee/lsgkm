@@ -1,4 +1,4 @@
-﻿## LS-GKM: A new and improved gkm-SVM software for large-scale datasets
+﻿## LS-GKM: A new gkm-SVM software for large-scale datasets
 
 gkm-SVM, a sequence-based method for predicting regulatory DNA elements,
 is a useful tool for studying gene regulatory mechanisms.
@@ -13,7 +13,7 @@ achieves considerably higher accuracy than the original gkm-SVM.
 
 * Ghandi, M.†, Lee, D.†, Mohammad-Noori, M. & Beer, M. A. Enhanced Regulatory Sequence Prediction Using Gapped k-mer Features. PLoS Comput Biol 10, e1003711 (2014). *† Co-first authors*
 
-* Lee, D. LS-GKM: A new and improved gkm-SVM for large-scale Datasets. (in preparation)
+* Lee, D. LS-GKM: A new gkm-SVM for large-scale Datasets. (in preparation)
 
 
 ### Installation
@@ -27,7 +27,6 @@ If successful, You should be able to find the following executables in the curre
 
     gkmtrain
     gkmpredict
-    gkmmatrix (not used)
 
 `make install` will simply copy these three executables to the `../bin` direcory
 
