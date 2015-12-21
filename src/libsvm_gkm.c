@@ -654,20 +654,25 @@ static double kmertreecoef_dfs(const KmerTreeCoef *tree, const int depth, const 
 
     if (depth == tree->depth - 1) {
         const double *coef= tree->coef_sum + (curr_node_index*MAX_ALPHABET_SIZE) - tree->node_count;
-        for (bid=1; bid<=MAX_ALPHABET_SIZE; bid++) {
-            for (j=0; j<curr_num_matching_bases; j++) {
-                const uint8_t *currbase_ptr = curr_matching_bases[j].bid;
-                const uint8_t currbase_wt = curr_matching_bases[j].wt;
-                const int currbase_mmcnt = curr_matching_bases[j].mmcnt;
-                if (*currbase_ptr == bid) {
+
+        //speed-up (~20%) by rearranging the double-loop and pre-calculation
+        for (j=0; j<curr_num_matching_bases; j++) {
+            const BaseMismatchCount *currbase = curr_matching_bases+j;
+            const uint8_t currbase_bid = *currbase->bid;
+            const int currbase_mmcnt = currbase->mmcnt;
+            const double currbase_mmcnt_wt0 = g_weights[currbase_mmcnt] * currbase->wt;
+            const double currbase_mmcnt_wt1 = g_weights[currbase_mmcnt+1] * currbase->wt;
+            for (bid=1; bid<=MAX_ALPHABET_SIZE; bid++) {
+                if (currbase_bid == bid) {
                     // matching
-                    result += (coef[bid] * g_weights[currbase_mmcnt] * currbase_wt);
+                    result += (coef[bid] * currbase_mmcnt_wt0);
                 } else if (currbase_mmcnt < d) {
                     // non-matching
-                    result += (coef[bid] * g_weights[currbase_mmcnt+1] * currbase_wt);
+                    result += (coef[bid] * currbase_mmcnt_wt1);
                 }
             }
         }
+
         return result;
     } else {
         int daughter_node_index = (curr_node_index*MAX_ALPHABET_SIZE);
