@@ -40,7 +40,7 @@ static int g_param_nthreads = 1;
 //static double g_param_lambda = 1.0;
 
 /* g_weights are automatically determined based on the g_param->L, g_param->k, and g_param->d */
-static double g_weights[MAX_MM] = {0.0};
+static double g_weights[MAX_MM+1] = {0.0};
 
 static KmerTree *g_kmertree = NULL;
 
