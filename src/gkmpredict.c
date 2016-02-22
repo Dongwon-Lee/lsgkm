@@ -227,9 +227,6 @@ int main(int argc, char **argv)
     max_line_len = 1024;
     line = (char *)malloc(((size_t) max_line_len) * sizeof(char));
 
-    // initialization of gkmkernel SV kmertree after reading SVs
-    gkmkernel_init_sv(model->SV, model->sv_coef[0], model->nr_class, model->l);
-
     clog_info(CLOG(LOGGER_ID), "write prediction result to %s", outfile);
     predict(input, output);
     svm_free_and_destroy_model(&model);

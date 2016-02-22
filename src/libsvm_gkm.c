@@ -24,6 +24,7 @@
 #include <math.h>
 #include <pthread.h>
 #include <sys/time.h>
+#include <locale.h>
 
 #include "libsvm_gkm.h"
 #include "clog.h"
@@ -56,6 +57,10 @@ static int g_sv_num = 0;
 
 static KmerTreeCoef *g_sv_kmertreecoef = NULL;
 
+static uint8_t *g_mmcnt_lookuptab = NULL;
+static int g_mmcnt_lookuptab_mask = 0;
+static int g_mmcnt_nlookups = 0;
+
 typedef struct _BaseMismatchCount {
     uint8_t *bid;
     uint8_t wt;
@@ -79,6 +84,15 @@ typedef struct _kmertreecoef_dfs_pthread_t{
     int num_matching_bases;
     double result;
 } kmertreecoef_dfs_pthread_t;
+
+typedef struct _kernelfunc_sqnorm_pthread_t {
+    int *twobitids;
+    int *wt;
+    int *mmprofile;
+    int nids;
+    int start_idx;
+    int end_idx;
+} kernelfunc_sqnorm_pthread_t;
 
 static time_t diff_ms(struct timeval t1, struct timeval t2)
 {
@@ -581,8 +595,8 @@ static void *kmertree_dfs_pthread(void *ptr)
 static void kmertree_dfs_pthread_process(kmertree_dfs_pthread_t *td, const int nthreads, const int start, const int end, double *res)
 {
     int i, j, k;
-    pthread_t threads[MAX_ALPHABET_SIZE*MAX_ALPHABET_SIZE];
-    int rc[MAX_ALPHABET_SIZE*MAX_ALPHABET_SIZE];
+    pthread_t threads[MAX_ALPHABET_SIZE_SQ];
+    int rc[MAX_ALPHABET_SIZE_SQ];
     const int d = g_param->d;
 
     //run threads. i=0 will be executed later in the main process
@@ -800,8 +814,8 @@ static void *kmertreecoef_dfs_pthread(void *ptr)
 static double kmertreecoef_dfs_pthread_process(kmertreecoef_dfs_pthread_t *td, const int nthreads)
 {
     int i;
-    pthread_t threads[MAX_ALPHABET_SIZE*MAX_ALPHABET_SIZE];
-    int rc[MAX_ALPHABET_SIZE*MAX_ALPHABET_SIZE];
+    pthread_t threads[MAX_ALPHABET_SIZE_SQ];
+    int rc[MAX_ALPHABET_SIZE_SQ];
 
     //run threads. i=0 will be executed later in the main process
     for (i=1; i<nthreads; i++) {
@@ -845,11 +859,11 @@ static double kmertreecoef_dfs_par4(const gkm_data *da)
 
 static double kmertreecoef_dfs_par16(const gkm_data *da)
 {
-    kmertreecoef_dfs_pthread_t td[MAX_ALPHABET_SIZE*MAX_ALPHABET_SIZE];
+    kmertreecoef_dfs_pthread_t td[MAX_ALPHABET_SIZE_SQ];
 
     kmertreecoef_dfs_pthread_init_par16(da, td);
 
-    return kmertreecoef_dfs_pthread_process(td, MAX_ALPHABET_SIZE*MAX_ALPHABET_SIZE);
+    return kmertreecoef_dfs_pthread_process(td, MAX_ALPHABET_SIZE_SQ);
 }
 
 /***************************************
@@ -903,11 +917,11 @@ static void gkmkernel_kernelfunc_batch_par4(const gkm_data *da, KmerTree *tree, 
 
 static void gkmkernel_kernelfunc_batch_par16(const gkm_data *da, KmerTree *tree, int start, int end, double *res)
 {
-    kmertree_dfs_pthread_t td[MAX_ALPHABET_SIZE*MAX_ALPHABET_SIZE];
+    kmertree_dfs_pthread_t td[MAX_ALPHABET_SIZE_SQ];
 
     kmertree_dfs_pthread_init_par16(da, end, tree, td);
 
-    kmertree_dfs_pthread_process(td, MAX_ALPHABET_SIZE*MAX_ALPHABET_SIZE, start, end, res);
+    kmertree_dfs_pthread_process(td, MAX_ALPHABET_SIZE_SQ, start, end, res);
 }
 
 //function pointer for the three batch kernel functions
@@ -927,6 +941,227 @@ static double gkmkernel_kernelfunc_raw(const gkm_data *da, const gkm_data *db)
     kmertree_cleanup(g_kmertree, 0, 0);
 
     return res;
+}
+
+// 2/17/2016
+// functions for efficient calulation of sqrt(K(a, a)) using XOR lookup table
+// This was also implemented in the original gkm-SVM software
+// current implementation only supports L<=MMCNT_LOOKUPTAB_WIDTH*2
+static void gkmkernel_build_mmcnt_lookuptable()
+{
+    int i, j;
+    int mask = 3;
+    int tablesize = (1<<(MMCNT_LOOKUPTAB_WIDTH*2));
+
+    g_mmcnt_lookuptab = (uint8_t *) malloc(sizeof(uint8_t) * tablesize);
+
+    for (i=0; i<tablesize; i++) {
+        int xor_word = i;
+        g_mmcnt_lookuptab[i] = 0;
+        for (j=0; j<MMCNT_LOOKUPTAB_WIDTH; j++) {
+            if ((xor_word & mask) != 0) {
+                g_mmcnt_lookuptab[i]++;
+            }
+            xor_word >>= 2;
+        }
+        //clog_trace(CLOG(LOGGER_ID), "g_lookup_table: %d %d", i, g_mmcnt_lookuptab[i]);
+    }
+
+    g_mmcnt_lookuptab_mask = 0;
+    for (i=0; i<MMCNT_LOOKUPTAB_WIDTH; i++) {
+        g_mmcnt_lookuptab_mask = ((g_mmcnt_lookuptab_mask << 2) | 3);
+    }
+   
+    if (g_param->L <= MMCNT_LOOKUPTAB_WIDTH) {
+        g_mmcnt_nlookups = 1;
+    } else if (g_param->L <= MMCNT_LOOKUPTAB_WIDTH*2) {
+        g_mmcnt_nlookups = 2;
+    } else {
+        clog_error(CLOG(LOGGER_ID), "L(%d) cannot be greater than MMCNT_LOOKUPTAB_WIDTH*2 (%d).", g_param->L, MMCNT_LOOKUPTAB_WIDTH*2);
+    }
+
+    clog_trace(CLOG(LOGGER_ID), "g_mmcnt_lookuptab_mask: %x", g_mmcnt_lookuptab_mask);
+    clog_trace(CLOG(LOGGER_ID), "g_mmcnt_nlookups: %d", g_mmcnt_nlookups);
+}
+
+static int sequence2twobitids(const gkm_data *d, int *twobitids)
+{
+    int i, j;
+    uint8_t *seqs[2] = {d->seq, d->seq_rc};
+    int nids = (d->seqlen - g_param->L + 1) * 2;
+
+    int mask=3;
+    for (i=0; i<g_param->L-1; i++) {
+        mask = ((mask<<2) | 3);
+    }
+
+    int cnt = 0;
+    for (j=0; j<2; j++) { 
+        int twobitid=0;
+        uint8_t *s = seqs[j];
+        for (i=0; i<g_param->L-1; i++) {
+            twobitid = ((twobitid<<2) | (s[i]-1));
+            //clog_trace(CLOG(LOGGER_ID), "seq2twobitid: %d %d %x", i, s[i]-1, twobitid);
+        }
+
+        for (i=g_param->L-1; i<d->seqlen; i++) {
+            twobitid = (((twobitid<<2) & mask) | (s[i]-1));
+
+            twobitids[cnt] = (twobitid & g_mmcnt_lookuptab_mask);
+
+            //each id is divided into two pieces if L is greater than MMCNT_LOOKUPTAB_WIDTH
+            if (g_mmcnt_nlookups == 2) {
+                twobitids[nids + cnt] = ((twobitid >> (2*MMCNT_LOOKUPTAB_WIDTH)) & g_mmcnt_lookuptab_mask);
+            }
+
+            cnt++;
+            //clog_trace(CLOG(LOGGER_ID), "seq2twobitid: %d %d %x", i, s[i]-1, twobitid);
+        }
+    }
+
+    return cnt;
+}
+
+static void *kernelfunc_sqnorm_pthread(void *ptr)
+{
+    int i, j;
+
+    kernelfunc_sqnorm_pthread_t *td = (kernelfunc_sqnorm_pthread_t *) ptr;
+    const int *twobitids = td->twobitids;
+    const int *wt = td->wt;
+    const int nids = td->nids;
+    const int d = g_param->d;
+    int *mmprofile = td->mmprofile;
+
+    for (i=td->start_idx; i<td->end_idx; i++) {
+        const int id0 = twobitids[i];
+        const int id1 = twobitids[nids + i];
+        const int wt_i = wt[i];
+        for (j=0; j<nids; j++) {
+            int mmcnt = g_mmcnt_lookuptab[id0 ^ twobitids[j]];
+            if ((mmcnt <= d) && (g_mmcnt_nlookups == 2)) {
+                mmcnt += g_mmcnt_lookuptab[id1 ^ twobitids[nids + j]];
+            }
+            if (mmcnt <= d) {
+                mmprofile[mmcnt]+=(wt_i*wt[j]);
+            }
+        }
+    }
+
+    return 0;
+}
+
+static double gkmkernel_kernelfunc_sqnorm_single(const gkm_data *da)
+{
+    int i, j, k;
+    int twobitids[MAX_SEQ_LENGTH*2*2];
+    int wt[MAX_SEQ_LENGTH*2];
+    int nids = sequence2twobitids(da, twobitids);
+    int nkmerids= (da->seqlen - g_param->L + 1);
+    int d = g_param->d;
+
+    int mmprofile[MAX_MM];
+
+    for (k=0; k<=d; k++) { mmprofile[k] = 0; }
+    for (i=0; i<nkmerids; i++) { wt[i] = da->wt[i]; }
+    for (i=0; i<nkmerids; i++) { wt[nkmerids + i] = da->wt_rc[i]; }
+
+    for (i=0; i<nkmerids; i++) { //the forward stand only
+        const int id0 = twobitids[i];
+        const int id1 = twobitids[nids + i];
+        const int wt_i = wt[i];
+        for (j=0; j<nids; j++) {
+            int mmcnt = g_mmcnt_lookuptab[id0 ^ twobitids[j]];
+            if ((mmcnt <= d) && (g_mmcnt_nlookups == 2)) {
+                mmcnt += g_mmcnt_lookuptab[id1 ^ twobitids[nids + j]];
+            }
+            if (mmcnt <= d) {
+                mmprofile[mmcnt]+=(wt_i*wt[j]);
+            }
+        }
+    }
+
+    double sum = 0;
+    for (k=0; k<=d; k++) {
+        sum += (g_weights[k]*mmprofile[k]);
+    }
+
+    return sqrt(sum);
+}
+
+static double gkmkernel_kernelfunc_sqnorm_multi(const gkm_data *da)
+{
+    int i, k;
+    int twobitids[MAX_SEQ_LENGTH*2*2];
+    int wt[MAX_SEQ_LENGTH*2];
+    int nids = sequence2twobitids(da, twobitids);
+    int nkmerids= (da->seqlen - g_param->L + 1);
+    int d = g_param->d;
+
+    kernelfunc_sqnorm_pthread_t td[MAX_ALPHABET_SIZE_SQ];
+    pthread_t threads[MAX_ALPHABET_SIZE_SQ];
+    int rc[MAX_ALPHABET_SIZE_SQ];
+    int mmprofile[MAX_ALPHABET_SIZE_SQ][MAX_MM];
+
+    for (i=0; i<g_param_nthreads; i++) {
+        for (k=0; k<=d; k++) { mmprofile[i][k] = 0; }
+    }
+    for (i=0; i<nkmerids; i++) { wt[i] = da->wt[i]; }
+    for (i=0; i<nkmerids; i++) { wt[nkmerids + i] = da->wt_rc[i]; }
+
+    int prev_end_idx = 0;
+    for (i=0; i<g_param_nthreads; i++) {
+        td[i].twobitids = twobitids;
+        td[i].wt = wt;
+        td[i].mmprofile = mmprofile[i];
+        td[i].nids = nids;
+        td[i].start_idx = prev_end_idx;
+        td[i].end_idx = int(nkmerids*(i+1)/g_param_nthreads) + 1;
+        prev_end_idx = td[i].end_idx;
+    }
+    td[g_param_nthreads-1].end_idx = nkmerids; // last idx in the last thread should always be this.
+
+    //run threads. i=0 will be executed later in the main process
+    for (i=1; i<g_param_nthreads; i++) {
+        rc[i] = pthread_create(&threads[i], NULL, kernelfunc_sqnorm_pthread, (void *) &td[i]);
+        if (rc[i]) {
+            clog_error(CLOG(LOGGER_ID), "failed to create thread %d. pthread_create() returned %d", i, rc[i]);
+        } else {
+            clog_trace(CLOG(LOGGER_ID), "thread %d was created", i);
+        }
+    }
+
+    //collect results
+    for (i=0; i<g_param_nthreads; i++) {
+        if (i == 0) {
+            kernelfunc_sqnorm_pthread((void *) &td[i]);
+        } else {
+            if (rc[i] == 0) {
+                //wait thread return
+                pthread_join(threads[i], NULL);
+            } else {
+                //if failed to run thread, execute the function in the main process
+                kernelfunc_sqnorm_pthread((void *) &td[i]);
+            }
+        }
+    }
+
+    double sum = 0;
+    for (k=0; k<=d; k++) {
+        for (i=1; i<g_param_nthreads; i++) { mmprofile[0][k] += mmprofile[i][k]; }
+        sum += (g_weights[k]*mmprofile[0][k]);
+    }
+
+    return sqrt(sum);
+}
+
+static double gkmkernel_kernelfunc_sqnorm(const gkm_data *da)
+{
+    if (g_param_nthreads == 1) {
+        return gkmkernel_kernelfunc_sqnorm_single(da);
+    } else {
+        return gkmkernel_kernelfunc_sqnorm_multi(da);
+    }
 }
 
 /******************************
@@ -1049,25 +1284,53 @@ gkm_data* gkmkernel_new_object(char *seq, char *sid, int seqid)
     */
 
     /* calculate square root of the kernel(d,d) and store for normalization */
+    /*
     double kern = gkmkernel_kernelfunc_raw(d, d);
 	clog_trace(CLOG(LOGGER_ID), "%d's kernel is %f", seqid, kern);
     d->sqnorm = sqrt(kern);
+    */
+
+    d->sqnorm = gkmkernel_kernelfunc_sqnorm(d);
+	clog_trace(CLOG(LOGGER_ID), "%d's sqnorm is %f", seqid, d->sqnorm);
 
     return(d);
 }
 
-/* free memory associated with the given object */
+/* free memory associated with the given object including the gkm_data object itself */
 void gkmkernel_delete_object(gkm_data* d)
 {
-    free(d->kmerids);
-    free(d->kmerids_rc);
-    free(d->seq_string);
-    free(d->wt);
-    free(d->wt_rc);
-    free(d->seq);
-    free(d->seq_rc);
+    if (d->kmerids) free(d->kmerids);
+    if (d->kmerids_rc) free(d->kmerids_rc);
+    if (d->seq_string) free(d->seq_string);
+    if (d->wt) free(d->wt);
+    if (d->wt_rc) free(d->wt_rc);
+    if (d->seq) free(d->seq);
+    if (d->seq_rc) free(d->seq_rc);
     if (d->sid) free(d->sid);
+
     free(d);
+}
+
+/* free up memory associated with the given object except the gkm_data to reduce memory usage in gkmpredict */
+void gkmkernel_free_object(gkm_data* d)
+{
+    if (d->kmerids) free(d->kmerids);
+    if (d->kmerids_rc) free(d->kmerids_rc);
+    if (d->seq_string) free(d->seq_string);
+    if (d->wt) free(d->wt);
+    if (d->wt_rc) free(d->wt_rc);
+    if (d->seq) free(d->seq);
+    if (d->seq_rc) free(d->seq_rc);
+    if (d->sid) free(d->sid);
+
+    d->kmerids = NULL;
+    d->kmerids_rc = NULL;
+    d->seq_string = NULL;
+    d->wt = NULL;
+    d->wt_rc = NULL;
+    d->seq = NULL;
+    d->seq_rc = NULL;
+    d->sid = NULL;
 }
 
 /* set the extra parameters for gkmkernel */
@@ -1118,6 +1381,8 @@ void gkmkernel_init(struct svm_parameter *param)
 
     g_kmertree = (KmerTree *) malloc(sizeof(KmerTree));
     kmertree_init(g_kmertree, g_param->L);
+
+    gkmkernel_build_mmcnt_lookuptable();
 }
 
 void gkmkernel_init_problems(union svm_data *x, int n)
@@ -1143,44 +1408,58 @@ void gkmkernel_init_problems(union svm_data *x, int n)
     }
 }
 
+static void gkmkernel_add_one_sv(gkm_data *sv_i, double sv_coef, int i, int nclass)
+{
+    int j, k;
+
+    if ((nclass == 2) &&
+        (g_param->kernel_type != EST_TRUNC_RBF) &&
+        (g_param->kernel_type != EST_TRUNC_PW_RBF)) {
+
+        //add (normalized) sv coef to the corresponding leaf
+        int nkmerids = sv_i->seqlen - g_param->L + 1;
+
+        int *kmerids[2] = {sv_i->kmerids, sv_i->kmerids_rc};
+        uint8_t *wts[2] = {sv_i->wt, sv_i->wt_rc};
+        for (k=0; k<2; k++) {
+            int *kmerid = kmerids[k];
+            uint8_t *wt = wts[k];
+            for (j=0; j<nkmerids; j++) {
+                g_sv_kmertreecoef->coef_sum[kmerid[j]] += ((sv_coef*wt[j])/sv_i->sqnorm);
+            }
+        }
+    } else {
+        kmertree_add_sequence(g_sv_kmertree, i, sv_i);
+    }
+}
+
+static void gkmkernel_init_sv_kmertree_objects(int nclass)
+{
+    if ((nclass == 2) &&
+        (g_param->kernel_type != EST_TRUNC_RBF) &&
+        (g_param->kernel_type != EST_TRUNC_PW_RBF)) {
+        //speed-up for linear binary classifier with g_sv_kemrtreecoef
+        g_sv_kmertreecoef = (KmerTreeCoef *) malloc(sizeof(KmerTreeCoef));
+        kmertreecoef_init(g_sv_kmertreecoef, g_param->L);
+    } else {
+        // initialize g_sv_kmertree for non-linear cases
+        g_sv_kmertree = (KmerTree *) malloc(sizeof(KmerTree));
+        kmertree_init(g_sv_kmertree, g_param->L);
+    }
+}
+
 void gkmkernel_init_sv(union svm_data *sv, double *coef, int nclass, int n) 
 {
-    int i, j, k;
+    int i;
+
+    gkmkernel_init_sv_kmertree_objects(nclass);
+
+    for (i=0; i<n; i++) {
+        gkmkernel_add_one_sv(sv[i].d, coef[i], i, nclass);
+    }
 
     g_sv_svm_data = sv;
     g_sv_num = n;
-
-    /* initialize g_sv_kmertree */
-    g_sv_kmertree = (KmerTree *) malloc(sizeof(KmerTree));
-    kmertree_init(g_sv_kmertree, g_param->L);
-
-    //add SV sequences
-    for (j=0; j<n; j++) {
-        kmertree_add_sequence(g_sv_kmertree, j, sv[j].d);
-    }
-
-    //speed-up for linear cases
-    if ((nclass == 2) && (g_param->kernel_type != EST_TRUNC_RBF) && (g_param->kernel_type != EST_TRUNC_PW_RBF)) {
-        g_sv_kmertreecoef = (KmerTreeCoef *) malloc(sizeof(KmerTreeCoef));
-        kmertreecoef_init(g_sv_kmertreecoef, g_param->L);
-
-        //add (normalized) sv coef to the corresponding leaf
-        for (j=0; j<n; j++) {
-            gkm_data *sv_j = sv[j].d;
-            double sv_coef = coef[j];
-            int nkmerids = sv_j->seqlen - g_param->L + 1;
-
-            int *kmerids[2] = {sv_j->kmerids, sv_j->kmerids_rc};
-            uint8_t *wts[2] = {sv_j->wt, sv_j->wt_rc};
-            for (k=0; k<2; k++) {
-                int *kmerid = kmerids[k];
-                uint8_t *wt = wts[k];
-                for (i=0; i<nkmerids; i++) {
-                    g_sv_kmertreecoef->coef_sum[kmerid[i]] += ((sv_coef*wt[i])/sv_j->sqnorm);
-                }
-            }
-        }
-    }
 }
 
 void gkmkernel_destroy_sv()
@@ -1429,3 +1708,361 @@ void gkmkernel_set_num_threads(int n)
         gkmkernel_kernelfunc_batch_ptr = gkmkernel_kernelfunc_batch_single;
     }
 }
+
+/*
+ * variables and functions copied from libsvm.cpp to improve svm_load_model function
+ *
+ */
+static const char *svm_type_table[] =
+{
+    "c_svc","nu_svc","one_class","epsilon_svr","nu_svr",NULL
+};
+
+static const char *kernel_type_table[]=
+{
+    "gkm_cnt", "gkm_estfull", "gkm_esttrunc", "gkmrbf", "wgkm", "wgkmrbf", NULL
+};
+
+int svm_save_model(const char *model_file_name, const svm_model *model)
+{
+    FILE *fp = fopen(model_file_name,"w");
+    if(fp==NULL) return -1;
+
+    char *old_locale = strdup(setlocale(LC_ALL, NULL));
+    setlocale(LC_ALL, "C");
+
+    const svm_parameter& param = model->param;
+
+    fprintf(fp,"svm_type %s\n", svm_type_table[param.svm_type]);
+    fprintf(fp,"kernel_type %s\n", kernel_type_table[param.kernel_type]);
+    fprintf(fp,"L %d\n", param.L);
+    fprintf(fp,"k %d\n", param.k);
+    fprintf(fp,"d %d\n", param.d);
+
+    if ((param.kernel_type == EST_TRUNC_RBF) || (param.kernel_type == EST_TRUNC_PW_RBF)) {
+        fprintf(fp,"gamma %g\n", param.gamma);
+    }
+
+    if ((param.kernel_type == EST_TRUNC_PW) || (param.kernel_type == EST_TRUNC_PW_RBF)) {
+        fprintf(fp,"M %d\n", param.M);
+        fprintf(fp,"H %g\n", param.H);
+    }
+
+    int nr_class = model->nr_class;
+    int l = model->l;
+    fprintf(fp, "nr_class %d\n", nr_class);
+    fprintf(fp, "total_sv %d\n",l);
+
+    {
+        fprintf(fp, "rho");
+        for(int i=0;i<nr_class*(nr_class-1)/2;i++)
+            fprintf(fp," %g",model->rho[i]);
+        fprintf(fp, "\n");
+    }
+
+    if(model->label)
+    {
+        fprintf(fp, "label");
+        for(int i=0;i<nr_class;i++)
+            fprintf(fp," %d",model->label[i]);
+        fprintf(fp, "\n");
+    }
+
+    if(model->probA) // regression has probA only
+    {
+        fprintf(fp, "probA");
+        for(int i=0;i<nr_class*(nr_class-1)/2;i++)
+            fprintf(fp," %g",model->probA[i]);
+        fprintf(fp, "\n");
+    }
+    if(model->probB)
+    {
+        fprintf(fp, "probB");
+        for(int i=0;i<nr_class*(nr_class-1)/2;i++)
+            fprintf(fp," %g",model->probB[i]);
+        fprintf(fp, "\n");
+    }
+
+    if(model->nSV)
+    {
+        fprintf(fp, "nr_sv");
+        for(int i=0;i<nr_class;i++)
+            fprintf(fp," %d",model->nSV[i]);
+        fprintf(fp, "\n");
+    }
+
+    fprintf(fp, "SV\n");
+    const double * const *sv_coef = model->sv_coef;
+    const svm_data *SV = model->SV;
+
+    for(int i=0;i<l;i++)
+    {
+        for(int j=0;j<nr_class-1;j++)
+            fprintf(fp, "%.16g ",sv_coef[j][i]);
+
+        fprintf(fp, "%s\n", SV[i].d->seq_string);
+    }
+
+    setlocale(LC_ALL, old_locale);
+    free(old_locale);
+
+    if (ferror(fp) != 0 || fclose(fp) != 0) return -1;
+    else return 0;
+}
+
+static char *line = NULL;
+static int max_line_len;
+
+static char* readline(FILE *input)
+{
+    int len;
+
+    if(fgets(line,max_line_len,input) == NULL)
+        return NULL;
+
+    while(strrchr(line,'\n') == NULL)
+    {
+        max_line_len *= 2;
+        line = (char *) realloc(line,(size_t) max_line_len);
+        len = (int) strlen(line);
+        if(fgets(line+len,max_line_len-len,input) == NULL)
+            break;
+    }
+    return line;
+}
+
+//
+// FSCANF helps to handle fscanf failures.
+// Its do-while block avoids the ambiguity when
+// if (...)
+//    FSCANF();
+// is used
+//
+#define FSCANF(_stream, _format, _var) do{ if (fscanf(_stream, _format, _var) != 1) return false; }while(0)
+static bool read_model_header(FILE *fp, svm_model* model)
+{
+    svm_parameter& param = model->param;
+    char cmd[81];
+    while(1)
+    {
+        FSCANF(fp,"%80s",cmd);
+
+        if(strcmp(cmd,"svm_type")==0)
+        {
+            FSCANF(fp,"%80s",cmd);
+            int i;
+            for(i=0;svm_type_table[i];i++)
+            {
+                if(strcmp(svm_type_table[i],cmd)==0)
+                {
+                    param.svm_type=i;
+                    break;
+                }
+            }
+            if(svm_type_table[i] == NULL)
+            {
+                clog_error(CLOG(LOGGER_ID), "unknown svm type (%s)", cmd);
+                return false;
+            }
+        }
+        else if(strcmp(cmd,"kernel_type")==0)
+        {
+            FSCANF(fp,"%80s",cmd);
+            int i;
+            for(i=0;kernel_type_table[i];i++)
+            {
+                if(strcmp(kernel_type_table[i],cmd)==0)
+                {
+                    param.kernel_type=i;
+                    break;
+                }
+            }
+            if(kernel_type_table[i] == NULL)
+            {
+                clog_error(CLOG(LOGGER_ID), "unknown kernel function (%s).", cmd);
+                return false;
+            }
+        }
+        else if(strcmp(cmd,"L")==0)
+            FSCANF(fp,"%d",&param.L);
+        else if(strcmp(cmd,"k")==0)
+            FSCANF(fp,"%d",&param.k);
+        else if(strcmp(cmd,"d")==0)
+            FSCANF(fp,"%d",&param.d);
+        else if(strcmp(cmd,"gamma")==0)
+            FSCANF(fp,"%lf",&param.gamma);
+        else if(strcmp(cmd,"M")==0)
+        {
+            int tmpM;
+            FSCANF(fp,"%d",&tmpM);
+            param.M = (uint8_t) tmpM;
+        }
+        else if(strcmp(cmd,"H")==0)
+            FSCANF(fp,"%lf",&param.H);
+        else if(strcmp(cmd,"nr_class")==0)
+            FSCANF(fp,"%d",&model->nr_class);
+        else if(strcmp(cmd,"total_sv")==0)
+            FSCANF(fp,"%d",&model->l);
+        else if(strcmp(cmd,"rho")==0)
+        {
+            int n = model->nr_class * (model->nr_class-1)/2;
+            model->rho = Malloc(double,n);
+            for(int i=0;i<n;i++)
+                FSCANF(fp,"%lf",&model->rho[i]);
+        }
+        else if(strcmp(cmd,"label")==0)
+        {
+            int n = model->nr_class;
+            model->label = Malloc(int,n);
+            for(int i=0;i<n;i++)
+                FSCANF(fp,"%d",&model->label[i]);
+        }
+        else if(strcmp(cmd,"probA")==0)
+        {
+            int n = model->nr_class * (model->nr_class-1)/2;
+            model->probA = Malloc(double,n);
+            for(int i=0;i<n;i++)
+                FSCANF(fp,"%lf",&model->probA[i]);
+        }
+        else if(strcmp(cmd,"probB")==0)
+        {
+            int n = model->nr_class * (model->nr_class-1)/2;
+            model->probB = Malloc(double,n);
+            for(int i=0;i<n;i++)
+                FSCANF(fp,"%lf",&model->probB[i]);
+        }
+        else if(strcmp(cmd,"nr_sv")==0)
+        {
+            int n = model->nr_class;
+            model->nSV = Malloc(int,n);
+            for(int i=0;i<n;i++)
+                FSCANF(fp,"%d",&model->nSV[i]);
+        }
+        else if(strcmp(cmd,"SV")==0)
+        {
+            while(1)
+            {
+                int c = getc(fp);
+                if(c==EOF || c=='\n') break;
+            }
+            break;
+        }
+        else
+        {
+            clog_error(CLOG(LOGGER_ID), "unknown text in model file: [%s]",cmd);
+            return false;
+        }
+    }
+
+    return true;
+
+}
+
+// load a model with gkmtree initialization
+svm_model *svm_load_model(const char *model_file_name)
+{
+    FILE *fp = fopen(model_file_name,"rb");
+    if(fp==NULL) return NULL;
+
+    char *old_locale = strdup(setlocale(LC_ALL, NULL));
+    setlocale(LC_ALL, "C");
+
+    // read parameters
+    svm_model *model = Malloc(svm_model,1);
+    model->rho = NULL;
+    model->probA = NULL;
+    model->probB = NULL;
+    model->sv_indices = NULL;
+    model->label = NULL;
+    model->nSV = NULL;
+
+    // read header
+    if (!read_model_header(fp, model))
+    {
+        clog_error(CLOG(LOGGER_ID), "fscanf failed to read model");
+        setlocale(LC_ALL, old_locale);
+        free(old_locale);
+        free(model->rho);
+        free(model->label);
+        free(model->nSV);
+        free(model);
+        return NULL;
+    }
+
+    // initialization of gkmkernel after reading header
+    gkmkernel_init(&model->param);
+
+    // initialization of SV kmertree
+    gkmkernel_init_sv_kmertree_objects(model->nr_class);
+
+    // read sv_coef and SV
+    int elements = 0;
+    long pos = ftell(fp);
+
+    max_line_len = 1024;
+    line = Malloc(char,max_line_len);
+    char *p,*endptr,*val;
+
+    while(readline(fp)!=NULL)
+    {
+        p = strtok(line,":");
+        while(1)
+        {
+            p = strtok(NULL,":");
+            if(p == NULL)
+                break;
+            ++elements;
+        }
+    }
+    elements += model->l;
+
+    fseek(fp,pos,SEEK_SET);
+
+    int m = model->nr_class - 1;
+    int l = model->l;
+    model->sv_coef = Malloc(double *,m);
+    int i;
+    for(i=0;i<m;i++)
+        model->sv_coef[i] = Malloc(double,l);
+    model->SV = Malloc(svm_data,l);
+
+    for(i=0;i<l;i++)
+    {
+        if ((i > 0) && ((i % 1000) == 0)) {
+            clog_info(CLOG(LOGGER_ID), "reading... %d/%d", i, l);
+        }
+
+        readline(fp);
+        p = strtok(line, " \t");
+        model->sv_coef[0][i] = strtod(p,&endptr);
+        for(int k=1;k<m;k++)
+        {
+            p = strtok(NULL, " \t");
+            model->sv_coef[k][i] = strtod(p,&endptr);
+        }
+
+        val = strtok(NULL,"\n");
+        model->SV[i].d = gkmkernel_new_object(val, NULL, i);
+
+        // add SV to kmertree or kmertreecoef
+        gkmkernel_add_one_sv(model->SV[i].d, model->sv_coef[0][i], i, model->nr_class);
+
+        // free-up unnecessary data
+        gkmkernel_free_object(model->SV[i].d);
+    }
+
+    free(line);
+    setlocale(LC_ALL, old_locale);
+    free(old_locale);
+
+    if (ferror(fp) != 0 || fclose(fp) != 0)
+        return NULL;
+
+    model->free_sv = 1; // XXX
+
+    g_sv_svm_data = model->SV;
+    g_sv_num = model->l;
+
+    return model;
+}
+
