@@ -44,7 +44,7 @@ void print_usage_and_exit()
             "            <outprefix>.cvpred.txt\n"
             "\n"
             "Options:\n"
-            " -t <0 ~ 5>   set kernel function (default: 2)\n"
+            " -t <0 ~ 5>   set kernel function (default: 4 wgkm)\n"
             "              NOTE: RBF kernels (3 and 5) work best with -c 10 -g 2\n"
             "                0 -- gapped-kmer\n"
             "                1 -- estimated l-mer with full filter\n"
@@ -53,8 +53,8 @@ void print_usage_and_exit()
             "                4 -- gkm + center weighted (wgkm)\n"
             "                     [weight = max(M, floor(M*exp(-ln(2)*D/H)+1))]\n"
             "                5 -- gkm + center weighted + RBF (wgkmrbf)\n"
-            " -l <int>     set word length, 3<=l<=12 (default: 10)\n"
-            " -k <int>     set number of informative column, k<=l (default: 6)\n"
+            " -l <int>     set word length, 3<=l<=12 (default: 11)\n"
+            " -k <int>     set number of informative column, k<=l (default: 7)\n"
             " -d <int>     set maximum number of mismatches to consider, d<=4 (default: 3)\n"
             " -g <float>   set gamma for RBF kernel. -t 3 or 5 only (default: 1.0)\n"
             " -M <int>     set the initial value (M) of the exponential decay function\n"
@@ -143,9 +143,9 @@ int main(int argc, char** argv)
 
     // default values
     param.svm_type = C_SVC;
-    param.kernel_type = EST_TRUNC;
-    param.L = 10;
-    param.k = 6;
+    param.kernel_type = EST_TRUNC_PW;
+    param.L = 11;
+    param.k = 7;
     param.d = 3;
     param.M = 50;
     param.H = 50;
