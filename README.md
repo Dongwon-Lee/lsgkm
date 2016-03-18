@@ -11,9 +11,9 @@ achieves considerably higher accuracy than the original gkm-SVM.
 
 *Please cite the following paper if you use LS-GKM in your research:*
 
-* Ghandi, M.†, Lee, D.†, Mohammad-Noori, M. & Beer, M. A. Enhanced Regulatory Sequence Prediction Using Gapped k-mer Features. PLoS Comput Biol 10, e1003711 (2014). *† Co-first authors*
+* Ghandi, M.†, Lee, D.†, Mohammad-Noori, M. & Beer, M. A. Enhanced Regulatory Sequence Prediction Using Gapped k-mer Features. PLoS Comput Biol 10, e1003711 (2014). doi:10.1371/journal.pcbi.1003711 *† Co-first authors*
 
-* Lee, D. LS-GKM: A new gkm-SVM for large-scale Datasets. (in preparation)
+* Lee, D. LS-GKM: A new gkm-SVM for large-scale Datasets. Bioinformatics btw142 (2016). doi:10.1093/bioinformatics/btw142
 
 
 ### Installation
