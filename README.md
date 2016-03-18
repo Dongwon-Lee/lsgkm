@@ -28,7 +28,7 @@ If successful, You should be able to find the following executables in the curre
     gkmtrain
     gkmpredict
 
-`make install` will simply copy these three executables to the `../bin` direcory
+`make install` will simply copy these two executables to the `../bin` direcory
 
 
 ### Tutorial
@@ -55,7 +55,7 @@ positive sequence file, negative sequence file, and prefix of output.
                 <outprefix>.cvpred.txt
 
     Options:
-     -t <0 ~ 5>   set kernel function (default: 2)
+     -t <0 ~ 5>   set kernel function (default: 4 wgkm)
                   NOTE: RBF kernels (3 and 5) work best with -c 10 -g 2
                     0 -- gapped-kmer
                     1 -- estimated l-mer with full filter
@@ -64,8 +64,8 @@ positive sequence file, negative sequence file, and prefix of output.
                     4 -- gkm + center weighted (wgkm)
                          [weight = max(M, floor(M*exp(-ln(2)*D/H)+1))]
                     5 -- gkm + center weighted + RBF (wgkmrbf)
-     -l <int>     set word length, 3<=l<=12 (default: 10)
-     -k <int>     set number of informative column, k<=l (default: 6)
+     -l <int>     set word length, 3<=l<=12 (default: 11)
+     -k <int>     set number of informative column, k<=l (default: 7)
      -d <int>     set maximum number of mismatches to consider, d<=4 (default: 3)
      -g <float>   set gamma for RBF kernel. -t 3 or 5 only (default: 1.0)
      -M <int>     set the initial value (M) of the exponential decay function
