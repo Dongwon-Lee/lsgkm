@@ -74,10 +74,9 @@ static char* readline(FILE *input)
             break;
     }
     
-    size_t len = strlen(line);
-    if (len > 0 && line[len-1] == '\n') {
-        line[--len] = '\0';
-    }
+    //remove CR ('\r') or LF ('\n'), whichever comes first
+    line[strcspn(line, "\r\n")] = '\0';
+
     return line;
 }
 
@@ -115,7 +114,7 @@ void predict(FILE *input, FILE *output)
 
             seq[0] = '\0'; //reset sequence
             seqlen = 0;
-            char *ptr = strtok(line," \t\n");
+            char *ptr = strtok(line," \t\r\n");
             if (strlen(ptr) >= MAX_SEQ_LENGTH) {
                 clog_error(CLOG(LOGGER_ID), "maximum sequence id length is %d.\n", MAX_SEQ_LENGTH-1);
                 exit(1);
