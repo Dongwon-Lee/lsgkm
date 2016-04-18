@@ -305,12 +305,15 @@ void read_fasta_file(const char *filename, int label)
             }
             strcpy(sid, ptr+1);
         } else {
-            if ((((size_t) seqlen) + strlen(line)) >= MAX_SEQ_LENGTH) {
-                clog_error(CLOG(LOGGER_ID), "maximum sequence length is %d.\n", MAX_SEQ_LENGTH-1);
-                exit(1);
+            if (seqlen < MAX_SEQ_LENGTH-1) {
+                if ((((size_t) seqlen) + strlen(line)) >= MAX_SEQ_LENGTH) {
+                    clog_warn(CLOG(LOGGER_ID), "maximum sequence length allowed is %d. The first %d nucleotides of %s will only be used (Note: You can increase the MAX_SEQ_LENGTH parameter in libsvm_gkm.h and recompile).", MAX_SEQ_LENGTH-1, MAX_SEQ_LENGTH-1, sid);
+                    int remaining_len = MAX_SEQ_LENGTH - seqlen - 1;
+                    line[remaining_len] = '\0';
+                }
+                strcat(seq, line);
+                seqlen += (int) strlen(line);
             }
-            strcat(seq, line);
-            seqlen += (int) strlen(line);
         }
     }
 
