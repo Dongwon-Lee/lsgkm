@@ -46,7 +46,8 @@ struct svm_problem
 
 enum { C_SVC, NU_SVC, ONE_CLASS, EPSILON_SVR, NU_SVR }; /* svm_type */
 enum { GKMDATA }; /* data_type */
-enum { GKM, EST_FULL, EST_TRUNC, EST_TRUNC_RBF, EST_TRUNC_PW, EST_TRUNC_PW_RBF}; /* kernel_type */
+enum { GKM, EST_FULL, EST_TRUNC, EST_TRUNC_RBF,
+       EST_TRUNC_PW, EST_TRUNC_PW_RBF, GKM_RBF}; /* kernel_type */
 
 struct svm_parameter
 {

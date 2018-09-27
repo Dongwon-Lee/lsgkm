@@ -1365,6 +1365,9 @@ void gkmkernel_init(struct svm_parameter *param)
         case EST_TRUNC_RBF:
             calc_gkm_kernel_lmerest_wt(1);
             break;
+        case GKM_RBF:
+            calc_gkm_kernel_wt();
+            break;
         case EST_TRUNC_PW_RBF:
             calc_gkm_kernel_lmerest_wt(1);
             break;
@@ -1413,7 +1416,7 @@ static void gkmkernel_add_one_sv(gkm_data *sv_i, double sv_coef, int i, int ncla
     int j, k;
 
     if ((nclass == 2) &&
-        (g_param->kernel_type != EST_TRUNC_RBF) &&
+        (g_param->kernel_type != EST_TRUNC_RBF) && (g_param->kernel_type != GKM_RBF) &&
         (g_param->kernel_type != EST_TRUNC_PW_RBF)) {
 
         //add (normalized) sv coef to the corresponding leaf
@@ -1436,7 +1439,7 @@ static void gkmkernel_add_one_sv(gkm_data *sv_i, double sv_coef, int i, int ncla
 static void gkmkernel_init_sv_kmertree_objects(int nclass)
 {
     if ((nclass == 2) &&
-        (g_param->kernel_type != EST_TRUNC_RBF) &&
+        (g_param->kernel_type != EST_TRUNC_RBF) && (g_param->kernel_type != GKM_RBF) &&
         (g_param->kernel_type != EST_TRUNC_PW_RBF)) {
         //speed-up for linear binary classifier with g_sv_kemrtreecoef
         g_sv_kmertreecoef = (KmerTreeCoef *) malloc(sizeof(KmerTreeCoef));
@@ -1581,7 +1584,7 @@ double* gkmkernel_kernelfunc_batch(const gkm_data *da, const union svm_data *db_
     }
 
     //RBF kernel
-    if (g_param->kernel_type == EST_TRUNC_RBF || g_param->kernel_type == EST_TRUNC_PW_RBF) {
+    if (g_param->kernel_type == EST_TRUNC_RBF || g_param->kernel_type == EST_TRUNC_PW_RBF || g_param->kernel_type == GKM_RBF) {
         for (i=0; i<n; i++) {
             res[i] = exp(g_param->gamma*(res[i]-1));
         }
@@ -1616,7 +1619,7 @@ double* gkmkernel_kernelfunc_batch_all(const int a, const int start, const int e
     }
 
     //RBF kernel
-    if (g_param->kernel_type == EST_TRUNC_RBF || g_param->kernel_type == EST_TRUNC_PW_RBF) {
+    if (g_param->kernel_type == EST_TRUNC_RBF || g_param->kernel_type == EST_TRUNC_PW_RBF || g_param->kernel_type == GKM_RBF) {
         for (j=0; j<end-start; j++) {
             res[j] = exp(g_param->gamma*(res[j]-1));
         }
@@ -1653,7 +1656,7 @@ double* gkmkernel_kernelfunc_batch_sv(const gkm_data *da, double *res)
     }
 
     //RBF kernel
-    if (g_param->kernel_type == EST_TRUNC_RBF || g_param->kernel_type == EST_TRUNC_PW_RBF) {
+    if (g_param->kernel_type == EST_TRUNC_RBF || g_param->kernel_type == EST_TRUNC_PW_RBF || g_param->kernel_type == GKM_RBF) {
         for (j=0; j<g_sv_num; j++) {
             res[j] = exp(g_param->gamma*(res[j]-1));
         }
@@ -1739,7 +1742,7 @@ int svm_save_model(const char *model_file_name, const svm_model *model)
     fprintf(fp,"k %d\n", param.k);
     fprintf(fp,"d %d\n", param.d);
 
-    if ((param.kernel_type == EST_TRUNC_RBF) || (param.kernel_type == EST_TRUNC_PW_RBF)) {
+    if ((param.kernel_type == EST_TRUNC_RBF) || (param.kernel_type == EST_TRUNC_PW_RBF) || (param.kernel_type == GKM_RBF) ) {
         fprintf(fp,"gamma %g\n", param.gamma);
     }
 

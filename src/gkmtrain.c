@@ -44,19 +44,20 @@ void print_usage_and_exit()
             "            <outprefix>.cvpred.txt\n"
             "\n"
             "Options:\n"
-            " -t <0 ~ 5>   set kernel function (default: 4 wgkm)\n"
-            "              NOTE: RBF kernels (3 and 5) work best with -c 10 -g 2\n"
+            " -t <0 ~ 6>   set kernel function (default: 4 wgkm)\n"
+            "              NOTE: RBF kernels (3, 5 and 6) work best with -c 10 -g 2\n"
             "                0 -- gapped-kmer\n"
             "                1 -- estimated l-mer with full filter\n"
             "                2 -- estimated l-mer with truncated filter (gkm)\n"
-            "                3 -- gkm + RBF (gkmrbf)\n"
-            "                4 -- gkm + center weighted (wgkm)\n"
+            "                3 -- (truncated l-mer) gkm + RBF (gkmrbf)\n"
+            "                4 -- (truncated l-mer) gkm + center weighted (wgkm)\n"
             "                     [weight = max(M, floor(M*exp(-ln(2)*D/H)+1))]\n"
-            "                5 -- gkm + center weighted + RBF (wgkmrbf)\n"
+            "                5 -- (truncated l-mer) gkm + center weighted + RBF (wgkmrbf)\n"
+            "                6 -- gapped-kmer + RBF\n"
             " -l <int>     set word length, 3<=l<=12 (default: 11)\n"
             " -k <int>     set number of informative column, k<=l (default: 7)\n"
             " -d <int>     set maximum number of mismatches to consider, d<=4 (default: 3)\n"
-            " -g <float>   set gamma for RBF kernel. -t 3 or 5 only (default: 1.0)\n"
+            " -g <float>   set gamma for RBF kernel. -t 3 or 5 or 6 only (default: 1.0)\n"
             " -M <int>     set the initial value (M) of the exponential decay function\n"
             "              for wgkm-kernels. max=255, -t 4 or 5 only (default: 50)\n"
             " -H <float>   set the half-life parameter (H) that is the distance (D) required\n"
@@ -278,7 +279,7 @@ int main(int argc, char** argv)
     clog_info(CLOG(LOGGER_ID), "  L = %d", param.L);
     clog_info(CLOG(LOGGER_ID), "  k = %d", param.k);
     clog_info(CLOG(LOGGER_ID), "  d = %d", param.d);
-    if (param.kernel_type == EST_TRUNC_RBF || param.kernel_type == EST_TRUNC_PW_RBF) {
+    if (param.kernel_type == EST_TRUNC_RBF || param.kernel_type == GKM_RBF || param.kernel_type == EST_TRUNC_PW_RBF) {
     clog_info(CLOG(LOGGER_ID), "  gamma = %g", param.gamma);
     }
     if (param.kernel_type == EST_TRUNC_PW || param.kernel_type == EST_TRUNC_PW_RBF) {

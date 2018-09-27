@@ -2571,7 +2571,7 @@ double svm_predict_values(const svm_model *model, const svm_data x, double* dec_
         int nr_class = model->nr_class;
 
         //for speed-up
-        if ((nr_class == 2) && (model->param.kernel_type != EST_TRUNC_RBF) && (model->param.kernel_type != EST_TRUNC_PW_RBF)) {
+        if ((nr_class == 2) && (model->param.kernel_type != EST_TRUNC_RBF) && (model->param.kernel_type != GKM_RBF) && (model->param.kernel_type != EST_TRUNC_PW_RBF)) {
             dec_values[0] = gkmkernel_predict(x.d) - model->rho[0];
 
             free(kvalue);
@@ -2758,7 +2758,7 @@ const char *svm_check_parameter(const svm_problem *prob, const svm_parameter *pa
     if(kernel_type != GKM &&
        kernel_type != EST_FULL &&
        kernel_type != EST_TRUNC &&
-       kernel_type != EST_TRUNC_RBF &&
+       kernel_type != EST_TRUNC_RBF && kernel_type != GKM_RBF &&
        kernel_type != EST_TRUNC_PW &&
        kernel_type != EST_TRUNC_PW_RBF)
         return "unknown kernel type";
