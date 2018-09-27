@@ -1,6 +1,6 @@
 Modified by Avanti Shrikumar to add in an RBF kernel that acts on the original gapped kmer kernel, rather than on the truncated l-mer estimates.
 
-﻿## LS-GKM: A new gkm-SVM software for large-scale datasets
+## LS-GKM: A new gkm-SVM software for large-scale datasets
 
 gkm-SVM, a sequence-based method for predicting regulatory DNA elements,
 is a useful tool for studying gene regulatory mechanisms.
