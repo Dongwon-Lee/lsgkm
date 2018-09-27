@@ -1723,7 +1723,7 @@ static const char *svm_type_table[] =
 
 static const char *kernel_type_table[]=
 {
-    "gkm_cnt", "gkm_estfull", "gkm_esttrunc", "gkmrbf", "wgkm", "wgkmrbf", NULL
+    "gkm_cnt", "gkm_estfull", "gkm_esttrunc", "gkmrbf", "wgkm", "wgkmrbf", "gkm_cnt_rbf", NULL
 };
 
 int svm_save_model(const char *model_file_name, const svm_model *model)
