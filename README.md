@@ -57,19 +57,20 @@ positive sequence file, negative sequence file, and prefix of output.
                 <outprefix>.cvpred.txt
 
     Options:
-     -t <0 ~ 5>   set kernel function (default: 4 wgkm)
-                  NOTE: RBF kernels (3 and 5) work best with -c 10 -g 2
+     -t <0 ~ 6>   set kernel function (default: 4 wgkm)
+                  NOTE: RBF kernels (3, 5 and 6) work best with -c 10 -g 2
                     0 -- gapped-kmer
                     1 -- estimated l-mer with full filter
                     2 -- estimated l-mer with truncated filter (gkm)
-                    3 -- gkm + RBF (gkmrbf)
-                    4 -- gkm + center weighted (wgkm)
+                    3 -- (truncated l-mer) gkm + RBF (gkmrbf)
+                    4 -- (truncated l-mer) gkm + center weighted (wgkm)
                          [weight = max(M, floor(M*exp(-ln(2)*D/H)+1))]
-                    5 -- gkm + center weighted + RBF (wgkmrbf)
+                    5 -- (truncated l-mer) gkm + center weighted + RBF (wgkmrbf)
+                    6 -- gapped-kmer + RBF
      -l <int>     set word length, 3<=l<=12 (default: 11)
      -k <int>     set number of informative column, k<=l (default: 7)
      -d <int>     set maximum number of mismatches to consider, d<=4 (default: 3)
-     -g <float>   set gamma for RBF kernel. -t 3 or 5 only (default: 1.0)
+     -g <float>   set gamma for RBF kernel. -t 3 or 5 or 6 only (default: 1.0)
      -M <int>     set the initial value (M) of the exponential decay function
                   for wgkm-kernels. max=255, -t 4 or 5 only (default: 50)
      -H <float>   set the half-life parameter (H) that is the distance (D) required
