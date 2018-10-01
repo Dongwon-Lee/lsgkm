@@ -22,7 +22,7 @@ import sys
 
 def revcomp(seq):
 	rc = {'A':'T', 'G':'C', 'C':'G', 'T':'A'}
-	return ''.join([rc[seq[i]] for i in xrange(len(seq)-1, -1, -1)])
+	return ''.join([rc[seq[i]] for i in range(len(seq)-1, -1, -1)])
 
 def id2kmer(kmerid, k):
 	kmer = ''
