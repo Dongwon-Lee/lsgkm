@@ -27,7 +27,7 @@ def revcomp(seq):
 def id2kmer(kmerid, k):
 	kmer = ''
 	nts = ['A', 'C', 'G', 'T']
-	for i in xrange(k):
+	for i in range(k):
 		kmer = nts[(kmerid % 4)] + kmer
 		kmerid = int(kmerid/4)
 
@@ -38,10 +38,10 @@ def main(argv = sys.argv):
 	desc = "generate all possible non-redundant k-mers with KMER_LENGTH and save it in FASTA format."
 
 	if len(sys.argv) != 3:
-		print usage
-		print
-		print desc 
-		print
+		print(usage)
+		print("")
+		print(desc) 
+		print("")
 		sys.exit(0)
 
 	kmerlen = int(sys.argv[1])
@@ -49,7 +49,7 @@ def main(argv = sys.argv):
 
 	fout = open(output, 'w')
 	kmers = set()
-	for kid in xrange(4**kmerlen):
+	for kid in range(4**kmerlen):
 		kmer = id2kmer(kid, kmerlen)
 		if kmer not in kmers:
 			fout.write( ">" + kmer + "\n" + kmer + "\n" )
