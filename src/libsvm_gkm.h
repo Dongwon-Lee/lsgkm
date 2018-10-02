@@ -86,6 +86,7 @@ double* gkmkernel_kernelfunc_batch_all(const int a, const int start, const int e
 void gkmkernel_init_sv(union svm_data *sv, double *coef, int nclass, int n);
 void gkmkernel_destroy_sv();
 double* gkmkernel_kernelfunc_batch_sv(const gkm_data *d, double *res);
+double* gkmexplainkernel_kernelfunc_batch_sv(const gkm_data *d, double *res, double **persv_explanation);
 
 void gkmkernel_init_predict(union svm_data *sv, double *alpha, int nclass, int n);
 double gkmkernel_predict(const gkm_data *d);

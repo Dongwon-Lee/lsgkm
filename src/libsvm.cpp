@@ -2538,6 +2538,99 @@ double svm_get_svr_probability(const svm_model *model)
     }
 }
 
+double svm_predict_and_explain_values(const svm_model *model, const svm_data x, double* dec_values, double *explanation)
+{
+    int i;
+
+    int l = model->l;
+    double *kvalue = Malloc(double,l);
+
+    int seqlen = x.d->seqlen
+
+    //initialize 2d array of per-sv explanation
+    double **persv_explanation = (double **) malloc(sizeof(double*) * ((size_t) (seqlen))); 
+    for (i=0; i<seqlen; i++) {
+        persv_explanation[i] = (double *) malloc(sizeof(double) * ((size_t) l));
+        for(j=0; j<l; j++) { persv_explanation[i][j] = 0.0; }
+    }
+    //initialize explanation
+    for (i=0; i<seqlen; i++) {
+        explanation[i] = 0.0;
+    }
+
+    if(model->param.svm_type == ONE_CLASS ||
+       model->param.svm_type == EPSILON_SVR ||
+       model->param.svm_type == NU_SVR)
+    {
+        assert (1==2); //I don't think this block is executed for gkm-svm
+        //since it isn't set up for one class stuff or regression stuff
+    }
+    else
+    {
+        int nr_class = model->nr_class;
+
+        gkmexplainkernel_kernelfunc_batch_sv(x.d, kvalue, persv_explanation);
+
+        int *start = Malloc(int,nr_class);
+        start[0] = 0;
+        for(i=1;i<nr_class;i++)
+            start[i] = start[i-1]+model->nSV[i-1];
+
+        int *vote = Malloc(int,nr_class);
+        for(i=0;i<nr_class;i++)
+            vote[i] = 0;
+
+
+        int p=0;
+        for(i=0;i<nr_class;i++)
+            for(int j=i+1;j<nr_class;j++)
+            {
+                double sum = 0;
+                int si = start[i];
+                int sj = start[j];
+                int ci = model->nSV[i];
+                int cj = model->nSV[j];
+                
+                int k;
+                double *coef1 = model->sv_coef[j-1];
+                double *coef2 = model->sv_coef[i];
+                for(k=0;k<ci;k++)
+                    sum += coef1[si+k] * kvalue[si+k];
+                for(k=0;k<cj;k++)
+                    sum += coef2[sj+k] * kvalue[sj+k];
+                for (h=0; h<seqlen; h++) {
+                    for(k=0;k<ci;k++)
+                        explanation[h] += persv_explanation[h][si+k]*kvalue[si+k];
+                    for(k=0;k<cj;k++)
+                        explanation[h] += persv_explanation[h][si+k]*kvalue[sj+k];
+                }
+                sum -= model->rho[p];
+                dec_values[p] = sum;
+
+                if(dec_values[p] > 0)
+                    ++vote[i];
+                else
+                    ++vote[j];
+                p++;
+            }
+
+        int vote_max_idx = 0;
+        for(i=1;i<nr_class;i++)
+            if(vote[i] > vote[vote_max_idx])
+                vote_max_idx = i;
+
+        free(kvalue);
+        //free per-sv explanation
+        for (i=0; i<seqlen; i++) {
+            free(persv_explanation[i]);
+        }
+        free(persv_explanation);
+        free(start);
+        free(vote);
+        return model->label[vote_max_idx];
+    }
+}
+
 double svm_predict_values(const svm_model *model, const svm_data x, double* dec_values)
 {
     int i;

@@ -116,6 +116,7 @@ int svm_get_nr_sv(const struct svm_model *model);
 double svm_get_svr_probability(const struct svm_model *model);
 
 double svm_predict_values(const struct svm_model *model, const union svm_data x, double* dec_values);
+double svm_predict_and_explain_values(const struct svm_model *model, const union svm_data x, double* dec_values, double *explanation);
 double svm_predict(const struct svm_model *model, const union svm_data x);
 double svm_predict_probability(const struct svm_model *model, const union svm_data x, double* prob_estimates);
 

@@ -906,6 +906,43 @@ static void gkmkernel_kernelfunc_batch_single(const gkm_data *da, KmerTree *tree
     free(mmprofile);
 }
 
+static void gkmexplainkernel_kernelfunc_batch_single(const gkm_data *da, KmerTree *tree, const int start, const int end, double *res, double **persv_explanation) 
+{
+    int i, j, k;
+    BaseMismatchCount matching_bases[MAX_SEQ_LENGTH];
+    int num_matching_bases = da->seqlen - g_param->L + 1;
+    const int d = g_param->d;
+
+    for (i=0; i<num_matching_bases; i++) {
+        matching_bases[i].bid = da->seq + i;
+        matching_bases[i].wt = da->wt[i];
+        matching_bases[i].mmcnt = 0;
+    }
+
+    /* initialize mmprofile*/
+    int **mmprofile = (int **) malloc(sizeof(int*) * ((size_t) (d+1)));
+    for (k=0; k<=d; k++) {
+        mmprofile[k] = (int *) malloc(sizeof(int)* ((size_t) end));
+        for(j=0; j<end; j++) { mmprofile[k][j] = 0; }
+    }
+
+    kmertree_dfs(tree, end, 0, 0, matching_bases, num_matching_bases, mmprofile);
+
+    for (j=start; j<end; j++) {
+        double sum = 0;
+        for (k=0; k<=d; k++) {
+            sum += (g_weights[k]*mmprofile[k][j]);
+        }
+        res[j-start] = sum;
+    }
+
+    //free mmprofile
+    for (k=0; k<=d; k++) {
+        free(mmprofile[k]);
+    }
+    free(mmprofile);
+}
+
 static void gkmkernel_kernelfunc_batch_par4(const gkm_data *da, KmerTree *tree, const int start, const int end, double *res)
 {
     kmertree_dfs_pthread_t td[MAX_ALPHABET_SIZE];
@@ -1627,6 +1664,43 @@ double* gkmkernel_kernelfunc_batch_all(const int a, const int start, const int e
 
     gettimeofday(&time_end, NULL);
     clog_trace(CLOG(LOGGER_ID), "DFS i=%d, start=%d, end=%d (%ld ms)", a, start, end, diff_ms(time_end, time_start));
+
+    return res;
+}
+
+/* calculate multiple kernels WITH EXPLANATION using precomputed kmertree with SVs */
+double* gkmexplainkernel_kernelfunc_batch_sv(const gkm_data *da, double *res, double **persv_explanation) 
+{
+    if (g_sv_kmertree == NULL) {
+        clog_error(CLOG(LOGGER_ID), "kmertree for SVs has not been initialized. call gkmkernel_init_sv() first.");
+        return NULL;
+    }
+
+    int j;
+    struct timeval time_start, time_end;
+
+    gettimeofday(&time_start, NULL);
+
+    //initialize results
+    for (j=0; j<g_sv_num; j++) { res[j] = 0; }
+
+    gkmexplainkernel_kernelfunc_batch_single(da, g_sv_kmertree, 0, g_sv_num, res, persv_explanation);
+
+    //normalization
+    double da_sqnorm = da->sqnorm;
+    for (j=0; j<g_sv_num; j++) {
+        res[j] /= (da_sqnorm*g_sv_svm_data[j].d->sqnorm);
+    }
+
+    //RBF kernel
+    if (g_param->kernel_type == EST_TRUNC_RBF || g_param->kernel_type == EST_TRUNC_PW_RBF || g_param->kernel_type == GKM_RBF) {
+        for (j=0; j<g_sv_num; j++) {
+            res[j] = exp(g_param->gamma*(res[j]-1));
+        }
+    }
+
+    gettimeofday(&time_end, NULL);
+    clog_trace(CLOG(LOGGER_ID), "DFS nSVs=%d (%ld ms)", g_sv_num, diff_ms(time_end, time_start));
 
     return res;
 }
