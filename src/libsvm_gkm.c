@@ -22,6 +22,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
+#include <assert.h>
 #include <pthread.h>
 #include <sys/time.h>
 #include <locale.h>
@@ -66,6 +67,14 @@ typedef struct _BaseMismatchCount {
     uint8_t wt;
     int mmcnt;
 } BaseMismatchCount;
+
+typedef struct _BaseMismatchCountForExplanation {
+    uint8_t *bid;
+    uint8_t wt;
+    int mmcnt;
+    int seqpos;
+    uint8_t *base_lmer_match_history;
+} BaseMismatchCountForExplanation;
 
 typedef struct _kmertree_dfs_pthread_t {
     KmerTree *tree;
@@ -406,6 +415,119 @@ static void kmertree_delete_sequence(const KmerTree *tree, int seqid, const gkm_
     }
 }
 */
+
+
+static void kmertree_dfs_withexplanation(const KmerTree *tree,
+    const int last_seqid, const int depth, const int curr_node_index,
+    const BaseMismatchCountForExplanation *curr_matching_bases,
+    const int curr_num_matching_bases, int **mmprof,
+    double **persv_explanation)
+{
+    int i, j, k;
+    int bid;
+
+    const int d = g_param->d; //for small speed-up
+    const int L = g_param->L;
+
+
+    if (depth == tree->depth - 1) {
+        KmerTreeLeaf *leaf = tree->leaf + (curr_node_index*MAX_ALPHABET_SIZE) - tree->node_count;
+        for (bid=1; bid<=MAX_ALPHABET_SIZE; bid++) {
+            leaf++;
+            if (leaf->count > 0) {
+                for (j=0; j<curr_num_matching_bases; j++) {
+                    const uint8_t currbase = *curr_matching_bases[j].bid;
+                    const uint8_t currbase_wt = curr_matching_bases[j].wt;
+                    const int currbase_mmcnt = curr_matching_bases[j].mmcnt;
+                    const int seqpos = curr_matching_bases[j].seqpos;
+                    const uint8_t *currbase_base_lmer_match_history = curr_matching_bases[j].base_lmer_match_history;
+                    if (currbase == bid) {
+                        // matching
+                        const int leaf_cnt = leaf->count;
+                        const KmerTreeLeafData *data = leaf->data;
+                        int *mmprof_mmcnt = mmprof[currbase_mmcnt];
+                        for (i=0; i<leaf_cnt; i++) { 
+                            if (data[i].seqid < last_seqid) {
+                                double to_distribute = (g_weights[currbase_mmcnt]*(data[i].wt*currbase_wt))/(L-currbase_mmcnt);
+                                int total_matches = 0;
+                                for (k=0; k<L; k++) {
+                                    if ((currbase_base_lmer_match_history[k] == 1) || (k==L-1)) {
+                                        persv_explanation[seqpos+k][data[i].seqid] += to_distribute;
+                                        total_matches += 1;
+                                    } 
+                                } 
+                                assert (total_matches==(L-currbase_mmcnt));
+                                mmprof_mmcnt[data[i].seqid] += (data[i].wt*currbase_wt); 
+                            }
+                        }
+                    } else if (currbase_mmcnt < d) {
+                        // non-matching
+                        const int leaf_cnt = leaf->count;
+                        const KmerTreeLeafData *data = leaf->data;
+                        int *mmprof_mmcnt = mmprof[currbase_mmcnt+1];
+                        for (i=0; i<leaf_cnt; i++) { 
+                            if (data[i].seqid < last_seqid) {
+                                double to_distribute = (g_weights[currbase_mmcnt+1]*(data[i].wt*currbase_wt))/(L-(currbase_mmcnt+1));
+                                int total_matches = 0;
+                                for (k=0; k<L; k++) {
+                                    if ((currbase_base_lmer_match_history[k] == 1) && (k<(L-1))) {
+                                        persv_explanation[seqpos+k][data[i].seqid] += to_distribute;
+                                        total_matches += 1;
+                                    } 
+                                } 
+                                assert (total_matches==(L-(currbase_mmcnt+1)));
+                                mmprof_mmcnt[data[i].seqid] += (data[i].wt*currbase_wt); 
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        int daughter_node_index = (curr_node_index*MAX_ALPHABET_SIZE);
+        for (bid=1; bid<=MAX_ALPHABET_SIZE; bid++) {
+            daughter_node_index++;
+            if (tree->node[daughter_node_index] > 0) {
+                BaseMismatchCountForExplanation next_matching_bases[MAX_SEQ_LENGTH];
+                int next_num_matching_bases = 0;
+
+                for (j=0; j<curr_num_matching_bases; j++) {
+                    uint8_t *currbase_ptr = curr_matching_bases[j].bid;
+                    int currbase_mmcnt = curr_matching_bases[j].mmcnt;
+                    int currbase_seqpos = curr_matching_bases[j].seqpos;
+                    uint8_t *currbase_base_lmer_match_history = curr_matching_bases[j].base_lmer_match_history;
+                    if (*currbase_ptr == bid) {
+                        // matching
+                        next_matching_bases[next_num_matching_bases].bid = currbase_ptr+1;
+                        next_matching_bases[next_num_matching_bases].wt = curr_matching_bases[j].wt;
+                        next_matching_bases[next_num_matching_bases].mmcnt = currbase_mmcnt;
+                        next_matching_bases[next_num_matching_bases].seqpos = currbase_seqpos;
+                        currbase_base_lmer_match_history[depth] = 1;
+                        next_matching_bases[next_num_matching_bases].base_lmer_match_history = currbase_base_lmer_match_history;
+                        next_num_matching_bases++;
+                    } else if (currbase_mmcnt < d) {
+                        // non-matching
+                        next_matching_bases[next_num_matching_bases].bid = currbase_ptr+1;
+                        next_matching_bases[next_num_matching_bases].wt = curr_matching_bases[j].wt;
+                        next_matching_bases[next_num_matching_bases].mmcnt = currbase_mmcnt+1;
+                        next_matching_bases[next_num_matching_bases].seqpos = currbase_seqpos;
+                        currbase_base_lmer_match_history[depth] = 0;
+                        next_matching_bases[next_num_matching_bases].base_lmer_match_history = currbase_base_lmer_match_history;
+                        next_num_matching_bases++;
+                    }
+                }
+
+                if (next_num_matching_bases > 0) {
+                    kmertree_dfs_withexplanation(tree, last_seqid, depth+1,
+                     daughter_node_index, next_matching_bases,
+                     next_num_matching_bases, mmprof,
+                     persv_explanation);
+                } 
+            }
+        }
+    }
+}
+
 
 static void kmertree_dfs(const KmerTree *tree, const int last_seqid, const int depth, const int curr_node_index, const BaseMismatchCount *curr_matching_bases, const int curr_num_matching_bases, int **mmprof)
 {
@@ -906,6 +1028,64 @@ static void gkmkernel_kernelfunc_batch_single(const gkm_data *da, KmerTree *tree
     free(mmprofile);
 }
 
+static void gkmexplainkernel_kernelfunc_batch_single(
+    const gkm_data *da,
+    KmerTree *tree, const int start, const int end,
+    double *res, double **persv_explanation) 
+{
+    int i, j, k;
+    BaseMismatchCountForExplanation matching_bases[MAX_SEQ_LENGTH];
+    int num_matching_bases = da->seqlen - g_param->L + 1;
+    const int d = g_param->d;
+
+    for (i=0; i<num_matching_bases; i++) {
+        matching_bases[i].bid = da->seq + i;
+        matching_bases[i].wt = da->wt[i];
+        matching_bases[i].mmcnt = 0;
+        matching_bases[i].seqpos = i;
+        //base match history
+        matching_bases[i].base_lmer_match_history = (uint8_t *) malloc(sizeof(uint8_t) * ((size_t) g_param->L));
+    }
+
+    /* initialize mmprofile*/
+    int **mmprofile = (int **) malloc(sizeof(int*) * ((size_t) (d+1)));
+    for (k=0; k<=d; k++) {
+        mmprofile[k] = (int *) malloc(sizeof(int)* ((size_t) end));
+        for(j=0; j<end; j++) { mmprofile[k][j] = 0; }
+    }
+
+    kmertree_dfs_withexplanation(tree, end, 0, 0, matching_bases,
+                                 num_matching_bases, mmprofile,
+                                 persv_explanation);
+
+    for (j=start; j<end; j++) {
+        double sum = 0;
+        for (k=0; k<=d; k++) {
+            sum += (g_weights[k]*mmprofile[k][j]);
+        }
+        double sum2 = 0;
+        for (k=0; k < da->seqlen; k++) {
+            sum2 += persv_explanation[k][j];
+        }
+        assert (fabs(sum-sum2) < 0.0000001);
+        res[j-start] = sum;
+    }
+
+    //free mmprofile
+    for (k=0; k<=d; k++) {
+        free(mmprofile[k]);
+    }
+    free(mmprofile);
+
+    //I have no idea whether I'm supposed to do a free here since I am
+    //not a c programmer
+    for (i=0; i<num_matching_bases; i++) {
+        //base match history
+        free(matching_bases[i].base_lmer_match_history);
+    }
+
+}
+
 static void gkmkernel_kernelfunc_batch_par4(const gkm_data *da, KmerTree *tree, const int start, const int end, double *res)
 {
     kmertree_dfs_pthread_t td[MAX_ALPHABET_SIZE];
@@ -1365,6 +1545,9 @@ void gkmkernel_init(struct svm_parameter *param)
         case EST_TRUNC_RBF:
             calc_gkm_kernel_lmerest_wt(1);
             break;
+        case GKM_RBF:
+            calc_gkm_kernel_wt();
+            break;
         case EST_TRUNC_PW_RBF:
             calc_gkm_kernel_lmerest_wt(1);
             break;
@@ -1408,12 +1591,14 @@ void gkmkernel_init_problems(union svm_data *x, int n)
     }
 }
 
-static void gkmkernel_add_one_sv(gkm_data *sv_i, double sv_coef, int i, int nclass)
+static void gkmkernel_add_one_sv(gkm_data *sv_i, double sv_coef,
+                                 int i, int nclass,
+                                 uint8_t force_nonlinear_init)
 {
     int j, k;
 
-    if ((nclass == 2) &&
-        (g_param->kernel_type != EST_TRUNC_RBF) &&
+    if ((nclass == 2) && (force_nonlinear_init==0) &&
+        (g_param->kernel_type != EST_TRUNC_RBF) && (g_param->kernel_type != GKM_RBF) &&
         (g_param->kernel_type != EST_TRUNC_PW_RBF)) {
 
         //add (normalized) sv coef to the corresponding leaf
@@ -1433,10 +1618,11 @@ static void gkmkernel_add_one_sv(gkm_data *sv_i, double sv_coef, int i, int ncla
     }
 }
 
-static void gkmkernel_init_sv_kmertree_objects(int nclass)
+static void gkmkernel_init_sv_kmertree_objects(int nclass,
+                                               uint8_t force_nonlinear_init)
 {
-    if ((nclass == 2) &&
-        (g_param->kernel_type != EST_TRUNC_RBF) &&
+    if ((nclass == 2) && (force_nonlinear_init == 0) &&
+        (g_param->kernel_type != EST_TRUNC_RBF) && (g_param->kernel_type != GKM_RBF) &&
         (g_param->kernel_type != EST_TRUNC_PW_RBF)) {
         //speed-up for linear binary classifier with g_sv_kemrtreecoef
         g_sv_kmertreecoef = (KmerTreeCoef *) malloc(sizeof(KmerTreeCoef));
@@ -1451,11 +1637,13 @@ static void gkmkernel_init_sv_kmertree_objects(int nclass)
 void gkmkernel_init_sv(union svm_data *sv, double *coef, int nclass, int n) 
 {
     int i;
+    uint8_t force_nonlinear_init = 0;
 
-    gkmkernel_init_sv_kmertree_objects(nclass);
+    gkmkernel_init_sv_kmertree_objects(nclass, force_nonlinear_init);
 
     for (i=0; i<n; i++) {
-        gkmkernel_add_one_sv(sv[i].d, coef[i], i, nclass);
+        gkmkernel_add_one_sv(sv[i].d, coef[i], i, nclass,
+                             force_nonlinear_init);
     }
 
     g_sv_svm_data = sv;
@@ -1581,7 +1769,7 @@ double* gkmkernel_kernelfunc_batch(const gkm_data *da, const union svm_data *db_
     }
 
     //RBF kernel
-    if (g_param->kernel_type == EST_TRUNC_RBF || g_param->kernel_type == EST_TRUNC_PW_RBF) {
+    if (g_param->kernel_type == EST_TRUNC_RBF || g_param->kernel_type == EST_TRUNC_PW_RBF || g_param->kernel_type == GKM_RBF) {
         for (i=0; i<n; i++) {
             res[i] = exp(g_param->gamma*(res[i]-1));
         }
@@ -1616,7 +1804,7 @@ double* gkmkernel_kernelfunc_batch_all(const int a, const int start, const int e
     }
 
     //RBF kernel
-    if (g_param->kernel_type == EST_TRUNC_RBF || g_param->kernel_type == EST_TRUNC_PW_RBF) {
+    if (g_param->kernel_type == EST_TRUNC_RBF || g_param->kernel_type == EST_TRUNC_PW_RBF || g_param->kernel_type == GKM_RBF) {
         for (j=0; j<end-start; j++) {
             res[j] = exp(g_param->gamma*(res[j]-1));
         }
@@ -1624,6 +1812,60 @@ double* gkmkernel_kernelfunc_batch_all(const int a, const int start, const int e
 
     gettimeofday(&time_end, NULL);
     clog_trace(CLOG(LOGGER_ID), "DFS i=%d, start=%d, end=%d (%ld ms)", a, start, end, diff_ms(time_end, time_start));
+
+    return res;
+}
+
+/* calculate multiple kernels WITH EXPLANATION using precomputed kmertree with SVs */
+double* gkmexplainkernel_kernelfunc_batch_sv(const gkm_data *da, double *res, double **persv_explanation) 
+{
+    if (g_sv_kmertree == NULL) {
+        clog_error(CLOG(LOGGER_ID), "in gkmexplainkernel_kernelfunc_batch_sv, kmertree for SVs has not been initialized. call gkmkernel_init_sv() first.");
+        return NULL;
+    }
+
+    int j, k;
+    struct timeval time_start, time_end;
+
+    gettimeofday(&time_start, NULL);
+
+    //initialize results
+    for (j=0; j<g_sv_num; j++) { res[j] = 0; }
+
+    gkmexplainkernel_kernelfunc_batch_single(da, g_sv_kmertree, 0, g_sv_num, res, persv_explanation);
+
+    //normalization
+    double da_sqnorm = da->sqnorm;
+    for (j=0; j<g_sv_num; j++) {
+        double denom = (da_sqnorm*g_sv_svm_data[j].d->sqnorm);
+        res[j] /= denom;
+        for (k=0; k<da->seqlen; k++) {
+            persv_explanation[k][j] /= denom;
+        } 
+    }
+
+    //RBF kernel
+    if (g_param->kernel_type == EST_TRUNC_RBF || g_param->kernel_type == EST_TRUNC_PW_RBF || g_param->kernel_type == GKM_RBF) {
+        for (j=0; j<g_sv_num; j++) {
+            //let the reference be the case where res[j] = 0
+            res[j] = exp(g_param->gamma*(res[j]-1));
+            double diff_from_ref = res[j] -  exp(g_param->gamma*(-1));
+            //distribute the difference from reference onto the bases
+            //compute the total importance
+            double per_sv_total = 0;
+            for (k=0; k<da->seqlen; k++) {
+                per_sv_total += persv_explanation[k][j];
+            } 
+            //distribute diff_from_ref proportionally
+            for (k=0; k<da->seqlen; k++) {
+                persv_explanation[k][j] = diff_from_ref*(
+                 persv_explanation[k][j]/per_sv_total);
+            } 
+        }
+    }
+
+    gettimeofday(&time_end, NULL);
+    clog_trace(CLOG(LOGGER_ID), "DFS nSVs=%d (%ld ms)", g_sv_num, diff_ms(time_end, time_start));
 
     return res;
 }
@@ -1653,7 +1895,7 @@ double* gkmkernel_kernelfunc_batch_sv(const gkm_data *da, double *res)
     }
 
     //RBF kernel
-    if (g_param->kernel_type == EST_TRUNC_RBF || g_param->kernel_type == EST_TRUNC_PW_RBF) {
+    if (g_param->kernel_type == EST_TRUNC_RBF || g_param->kernel_type == EST_TRUNC_PW_RBF || g_param->kernel_type == GKM_RBF) {
         for (j=0; j<g_sv_num; j++) {
             res[j] = exp(g_param->gamma*(res[j]-1));
         }
@@ -1720,7 +1962,7 @@ static const char *svm_type_table[] =
 
 static const char *kernel_type_table[]=
 {
-    "gkm_cnt", "gkm_estfull", "gkm_esttrunc", "gkmrbf", "wgkm", "wgkmrbf", NULL
+    "gkm_cnt", "gkm_estfull", "gkm_esttrunc", "gkmrbf", "wgkm", "wgkmrbf", "gkm_cnt_rbf", NULL
 };
 
 int svm_save_model(const char *model_file_name, const svm_model *model)
@@ -1739,7 +1981,7 @@ int svm_save_model(const char *model_file_name, const svm_model *model)
     fprintf(fp,"k %d\n", param.k);
     fprintf(fp,"d %d\n", param.d);
 
-    if ((param.kernel_type == EST_TRUNC_RBF) || (param.kernel_type == EST_TRUNC_PW_RBF)) {
+    if ((param.kernel_type == EST_TRUNC_RBF) || (param.kernel_type == EST_TRUNC_PW_RBF) || (param.kernel_type == GKM_RBF) ) {
         fprintf(fp,"gamma %g\n", param.gamma);
     }
 
@@ -1959,8 +2201,10 @@ static bool read_model_header(FILE *fp, svm_model* model)
 }
 
 // load a model with gkmtree initialization
-svm_model *svm_load_model(const char *model_file_name)
+svm_model *svm_load_model(const char *model_file_name,
+                          uint8_t force_nonlinear_init)
 {
+    clog_info(CLOG(LOGGER_ID), "In svm_load_model");
     FILE *fp = fopen(model_file_name,"rb");
     if(fp==NULL) return NULL;
 
@@ -1989,11 +2233,12 @@ svm_model *svm_load_model(const char *model_file_name)
         return NULL;
     }
 
+    clog_info(CLOG(LOGGER_ID), "Calling gkmkernel_init");
     // initialization of gkmkernel after reading header
     gkmkernel_init(&model->param);
 
     // initialization of SV kmertree
-    gkmkernel_init_sv_kmertree_objects(model->nr_class);
+    gkmkernel_init_sv_kmertree_objects(model->nr_class, force_nonlinear_init);
 
     // read sv_coef and SV
     int elements = 0;
@@ -2045,7 +2290,8 @@ svm_model *svm_load_model(const char *model_file_name)
         model->SV[i].d = gkmkernel_new_object(val, NULL, i);
 
         // add SV to kmertree or kmertreecoef
-        gkmkernel_add_one_sv(model->SV[i].d, model->sv_coef[0][i], i, model->nr_class);
+        gkmkernel_add_one_sv(model->SV[i].d, model->sv_coef[0][i],
+                             i, model->nr_class, force_nonlinear_init);
 
         // free-up unnecessary data
         gkmkernel_free_object(model->SV[i].d);

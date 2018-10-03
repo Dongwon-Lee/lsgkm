@@ -46,7 +46,8 @@ struct svm_problem
 
 enum { C_SVC, NU_SVC, ONE_CLASS, EPSILON_SVR, NU_SVR }; /* svm_type */
 enum { GKMDATA }; /* data_type */
-enum { GKM, EST_FULL, EST_TRUNC, EST_TRUNC_RBF, EST_TRUNC_PW, EST_TRUNC_PW_RBF}; /* kernel_type */
+enum { GKM, EST_FULL, EST_TRUNC, EST_TRUNC_RBF,
+       EST_TRUNC_PW, EST_TRUNC_PW_RBF, GKM_RBF}; /* kernel_type */
 
 struct svm_parameter
 {
@@ -115,6 +116,7 @@ int svm_get_nr_sv(const struct svm_model *model);
 double svm_get_svr_probability(const struct svm_model *model);
 
 double svm_predict_values(const struct svm_model *model, const union svm_data x, double* dec_values);
+double svm_predict_and_explain_values(const struct svm_model *model, const union svm_data x, double* dec_values, double *explanation);
 double svm_predict(const struct svm_model *model, const union svm_data x);
 double svm_predict_probability(const struct svm_model *model, const union svm_data x, double* prob_estimates);
 

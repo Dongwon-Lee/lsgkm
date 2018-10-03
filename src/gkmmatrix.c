@@ -210,7 +210,7 @@ int main(int argc, char** argv)
     clog_info(CLOG(LOGGER_ID), "  L = %d", param.L);
     clog_info(CLOG(LOGGER_ID), "  k = %d", param.k);
     clog_info(CLOG(LOGGER_ID), "  d = %d", param.d);
-    if (param.kernel_type == EST_TRUNC_RBF || param.kernel_type == EST_TRUNC_PW_RBF) {
+    if (param.kernel_type == EST_TRUNC_RBF || param.kernel_type == GKM_RBF || param.kernel_type == EST_TRUNC_PW_RBF) {
         clog_info(CLOG(LOGGER_ID), "  gamma = %g", param.gamma);
     }
 

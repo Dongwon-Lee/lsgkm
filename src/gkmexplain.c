@@ -32,9 +32,9 @@ void print_usage_and_exit()
 {
     printf(
             "\n"
-            "Usage: gkmpredict [options] <test_seqfile> <model_file> <output_file>\n"
+            "Usage: gkmexplain [options] <test_seqfile> <model_file> <output_file>\n"
             "\n"
-            " score test sequences using trained gkm-SVM\n"
+            " explain prediction on test sequences using trained gkm-SVM\n"
             "\n"
             "Arguments:\n"
             " test_seqfile: sequence file for test (fasta format)\n"
@@ -80,32 +80,42 @@ static char* readline(FILE *input)
     return line;
 }
 
-double calculate_score(char *seq)
+double calculate_score_and_explanation(char *seq, double *explanation)
 {
     union svm_data x;
     double score;
 
     x.d = gkmkernel_new_object(seq, NULL, 0);
 
-    svm_predict_values(model, x, &score);
+    svm_predict_and_explain_values(model, x, &score, explanation);
 
     gkmkernel_delete_object(x.d);
 
     return score;
 }
 
-void predict(FILE *input, FILE *output)
+void predict_and_explain(FILE *input, FILE *output)
 {
     int iseq = -1;
     char seq[MAX_SEQ_LENGTH];
     char sid[MAX_SEQ_LENGTH];
+    double explanation[MAX_SEQ_LENGTH];
     int seqlen = 0;
+    int i;
     sid[0] = '\0';
     while (readline(input)) {
         if (line[0] == '>') {
             if (iseq >= 0) {
-                double score = calculate_score(seq);
-                fprintf(output, "%s\t%g\n",sid, score);
+                double score = calculate_score_and_explanation(seq,
+                                                               explanation);
+                fprintf(output, "%s\t%g\t",sid, score);
+                for (i=0; i<seqlen; i++) {
+                    if (i > 0) {
+                        fprintf(output, ",");
+                    }
+                    fprintf(output, "%g", explanation[i]);
+                }
+                fprintf(output, "\n");
                 if ((iseq + 1) % 100 == 0) {
                     clog_info(CLOG(LOGGER_ID), "%d scored", iseq+1);
                 }
@@ -134,8 +144,15 @@ void predict(FILE *input, FILE *output)
     }
 
     // last one
-    double score = calculate_score(seq);
-    fprintf(output, "%s\t%g\n",sid, score);
+    double score = calculate_score_and_explanation(seq, explanation);
+    fprintf(output, "%s\t%g\t",sid, score);
+    for (i=0; i<seqlen; i++) {
+        if (i > 0) {
+            fprintf(output, ",");
+        }
+        fprintf(output, "%g", explanation[i]);
+    }
+    fprintf(output, "\n");
 
     clog_info(CLOG(LOGGER_ID), "%d scored", iseq+1);
 
@@ -220,9 +237,8 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    clog_info(CLOG(LOGGER_ID), "test log");
     clog_info(CLOG(LOGGER_ID), "load model %s", modelfile);
-    uint8_t force_nonlinear_init = 0;
+    uint8_t force_nonlinear_init = 1;
     if((model=svm_load_model(modelfile, force_nonlinear_init))==0) {
         clog_error(CLOG(LOGGER_ID),"can't open model file %s", modelfile);
         exit(1);
@@ -232,7 +248,7 @@ int main(int argc, char **argv)
     line = (char *)malloc(((size_t) max_line_len) * sizeof(char));
 
     clog_info(CLOG(LOGGER_ID), "write prediction result to %s", outfile);
-    predict(input, output);
+    predict_and_explain(input, output);
     svm_free_and_destroy_model(&model);
     free(line);
     fclose(input);
