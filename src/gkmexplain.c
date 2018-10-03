@@ -90,6 +90,8 @@ double calculate_score_and_explanation(char *seq, double *explanation)
     svm_predict_and_explain_values(model, x, &score, explanation);
 
     gkmkernel_delete_object(x.d);
+
+    return score;
 }
 
 void predict_and_explain(FILE *input, FILE *output)
@@ -99,6 +101,7 @@ void predict_and_explain(FILE *input, FILE *output)
     char sid[MAX_SEQ_LENGTH];
     double explanation[MAX_SEQ_LENGTH];
     int seqlen = 0;
+    int i;
     sid[0] = '\0';
     while (readline(input)) {
         if (line[0] == '>') {
@@ -106,7 +109,7 @@ void predict_and_explain(FILE *input, FILE *output)
                 double score = calculate_score_and_explanation(seq,
                                                                explanation);
                 fprintf(output, "%s\t%g\t",sid, score);
-                for (i=0; j<seqlen; i++) {
+                for (i=0; i<seqlen; i++) {
                     if (i > 0) {
                         fprintf(output, ",");
                     }
@@ -141,8 +144,15 @@ void predict_and_explain(FILE *input, FILE *output)
     }
 
     // last one
-    double score = calculate_score(seq);
-    fprintf(output, "%s\t%g\n",sid, score);
+    double score = calculate_score_and_explanation(seq, explanation);
+    fprintf(output, "%s\t%g\t",sid, score);
+    for (i=0; i<seqlen; i++) {
+        if (i > 0) {
+            fprintf(output, ",");
+        }
+        fprintf(output, "%g", explanation[i]);
+    }
+    fprintf(output, "\n");
 
     clog_info(CLOG(LOGGER_ID), "%d scored", iseq+1);
 

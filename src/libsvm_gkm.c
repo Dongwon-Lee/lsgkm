@@ -22,6 +22,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
+#include <assert.h>
 #include <pthread.h>
 #include <sys/time.h>
 #include <locale.h>
@@ -415,7 +416,7 @@ static void kmertree_dfs_withexplanation(const KmerTree *tree,
     double **persv_explanation,
     uint8_t **base_kmer_match_history)
 {
-    int i, j;
+    int i, j, k;
     int bid;
 
     const int d = g_param->d; //for small speed-up
@@ -439,14 +440,14 @@ static void kmertree_dfs_withexplanation(const KmerTree *tree,
                         for (i=0; i<leaf_cnt; i++) { 
                             if (data[i].seqid < last_seqid) {
                                 double to_distribute = (g_weights[currbase_mmcnt]*(data[i].wt*currbase_wt))/(L-currbase_mmcnt);
-                                int total_matches = 0
+                                int total_matches = 0;
                                 for (k=0; k<L; k++) {
                                     if (base_kmer_match_history[j][k] == 1) {
                                         persv_explanation[data[i].seqid][j+k] += to_distribute;
-                                        total_matches += 1
+                                        total_matches += 1;
                                     } 
                                 } 
-                                assert (total_matches==(L-currbase_mmcnt))
+                                assert (total_matches==(L-currbase_mmcnt));
                                 mmprof_mmcnt[data[i].seqid] += (data[i].wt*currbase_wt); 
                             }
                         }
@@ -459,13 +460,14 @@ static void kmertree_dfs_withexplanation(const KmerTree *tree,
                         for (i=0; i<leaf_cnt; i++) { 
                             if (data[i].seqid < last_seqid) {
                                 double to_distribute = (g_weights[currbase_mmcnt+1]*(data[i].wt*currbase_wt))/(L-(currbase_mmcnt+1));
+                                int total_matches = 0;
                                 for (k=0; k<L; k++) {
                                     if (base_kmer_match_history[j][k] == 1) {
                                         persv_explanation[data[i].seqid][j+k] += to_distribute;
-                                        total_matches += 1
+                                        total_matches += 1;
                                     } 
                                 } 
-                                assert (total_matches==(L-currbase_mmcnt))
+                                assert (total_matches==(L-currbase_mmcnt));
                                 mmprof_mmcnt[data[i].seqid] += (data[i].wt*currbase_wt); 
                             }
                         }
@@ -1054,9 +1056,9 @@ static void gkmexplainkernel_kernelfunc_batch_single(
         }
         double sum2 = 0;
         for (k=0; k < da->seqlen; k++) {
-            sum2 += persv_explanation[k][j]
+            sum2 += persv_explanation[k][j];
         }
-        assert (sum==sum2)
+        assert (sum==sum2);
         res[j-start] = sum;
     }
 
@@ -1806,7 +1808,7 @@ double* gkmexplainkernel_kernelfunc_batch_sv(const gkm_data *da, double *res, do
         return NULL;
     }
 
-    int j;
+    int j, k;
     struct timeval time_start, time_end;
 
     gettimeofday(&time_start, NULL);
@@ -1836,12 +1838,12 @@ double* gkmexplainkernel_kernelfunc_batch_sv(const gkm_data *da, double *res, do
             //compute the total importance
             double per_sv_total = 0;
             for (k=0; k<da->seqlen; k++) {
-                per_sv_total += persv_explanation[k][j]
+                per_sv_total += persv_explanation[k][j];
             } 
             //distribute diff_from_ref proportionally
             for (k=0; k<da->seqlen; k++) {
                 persv_explanation[k][j] = diff_from_ref*(
-                 persv_explanation[k][j]/per_sv_total)
+                 persv_explanation[k][j]/per_sv_total);
             } 
         }
     }

@@ -33,6 +33,7 @@
  */
 
 #include <math.h>
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -2541,11 +2542,12 @@ double svm_get_svr_probability(const svm_model *model)
 double svm_predict_and_explain_values(const svm_model *model, const svm_data x, double* dec_values, double *explanation)
 {
     int i;
+    int j;
 
     int l = model->l;
     double *kvalue = Malloc(double,l);
 
-    int seqlen = x.d->seqlen
+    int seqlen = x.d->seqlen;
 
     //initialize 2d array of per-sv explanation
     double **persv_explanation = (double **) malloc(sizeof(double*) * ((size_t) (seqlen))); 
@@ -2592,6 +2594,7 @@ double svm_predict_and_explain_values(const svm_model *model, const svm_data x, 
                 int cj = model->nSV[j];
                 
                 int k;
+                int h;
                 double *coef1 = model->sv_coef[j-1];
                 double *coef2 = model->sv_coef[i];
                 for(k=0;k<ci;k++)
