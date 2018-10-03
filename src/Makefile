@@ -3,9 +3,11 @@ CFLAGS = -Wall -Wconversion -O3 -fPIC
 #CFLAGS = -Wall -Wconversion -g -fPIC
 SHVER = 2
 
-all: gkmtrain gkmpredict
+all: gkmtrain gkmpredict gkmexplain
 #all: gkmtrain gkmpredict gkmmatrix 
 
+gkmexplain: gkmexplain.c libsvm.o libsvm_gkm.o
+	$(CXX) $(CFLAGS) gkmexplain.c libsvm.o libsvm_gkm.o -o gkmexplain -lm -lpthread
 gkmpredict: gkmpredict.c libsvm.o libsvm_gkm.o
 	$(CXX) $(CFLAGS) gkmpredict.c libsvm.o libsvm_gkm.o -o gkmpredict -lm -lpthread
 gkmtrain: gkmtrain.c libsvm.o libsvm_gkm.o
@@ -21,7 +23,7 @@ libsvm_gkm.o: libsvm_gkm.c libsvm_gkm.h
 	$(CXX) $(CFLAGS) -c libsvm_gkm.c
 
 clean:
-	rm -f libsvm.o libsvm_gkm.o gkmtrain gkmpredict gkmmatrix
+	rm -f libsvm.o libsvm_gkm.o gkmtrain gkmpredict gkmexplain gkmmatrix
 
 install:
-	cp gkmtrain gkmpredict ../bin
+	cp gkmtrain gkmpredict gkmexplain ../bin
