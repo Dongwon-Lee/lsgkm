@@ -429,7 +429,6 @@ static void kmertree_dfs_withexplanation(const KmerTree *tree,
     const int d = g_param->d; //for small speed-up
     const int L = g_param->L;
 
-    clog_info(CLOG(LOGGER_ID), "depth %d curr_node_index %d",depth,curr_node_index);
 
     if (depth == tree->depth - 1) {
         KmerTreeLeaf *leaf = tree->leaf + (curr_node_index*MAX_ALPHABET_SIZE) - tree->node_count;
@@ -444,7 +443,6 @@ static void kmertree_dfs_withexplanation(const KmerTree *tree,
                     const uint8_t *currbase_base_lmer_match_history = curr_matching_bases[j].base_lmer_match_history;
                     if (currbase == bid) {
                         // matching
-                        clog_info(CLOG(LOGGER_ID), "matching");
                         const int leaf_cnt = leaf->count;
                         const KmerTreeLeafData *data = leaf->data;
                         int *mmprof_mmcnt = mmprof[currbase_mmcnt];
@@ -453,21 +451,17 @@ static void kmertree_dfs_withexplanation(const KmerTree *tree,
                                 double to_distribute = (g_weights[currbase_mmcnt]*(data[i].wt*currbase_wt))/(L-currbase_mmcnt);
                                 int total_matches = 0;
                                 for (k=0; k<L; k++) {
-                                    clog_info(CLOG(LOGGER_ID), "checking base kmer match history with k %d and j %d",k,j);
                                     if ((currbase_base_lmer_match_history[k] == 1) || (k==L-1)) {
-                                        clog_info(CLOG(LOGGER_ID), "updating persv_explanation with i %d and data[i].seqid %d",i,data[i].seqid);
                                         persv_explanation[seqpos+k][data[i].seqid] += to_distribute;
                                         total_matches += 1;
                                     } 
                                 } 
-                                clog_info(CLOG(LOGGER_ID), "total_matches %d L %d currbase_mmcnt %d",total_matches,L,currbase_mmcnt);
                                 assert (total_matches==(L-currbase_mmcnt));
                                 mmprof_mmcnt[data[i].seqid] += (data[i].wt*currbase_wt); 
                             }
                         }
                     } else if (currbase_mmcnt < d) {
                         // non-matching
-                        clog_info(CLOG(LOGGER_ID), "non matching");
                         const int leaf_cnt = leaf->count;
                         const KmerTreeLeafData *data = leaf->data;
                         int *mmprof_mmcnt = mmprof[currbase_mmcnt+1];
@@ -481,7 +475,6 @@ static void kmertree_dfs_withexplanation(const KmerTree *tree,
                                         total_matches += 1;
                                     } 
                                 } 
-                                clog_info(CLOG(LOGGER_ID), "total_matches %d L %d currbase_mmcnt %d",total_matches,L,currbase_mmcnt+1);
                                 assert (total_matches==(L-(currbase_mmcnt+1)));
                                 mmprof_mmcnt[data[i].seqid] += (data[i].wt*currbase_wt); 
                             }
@@ -1061,7 +1054,6 @@ static void gkmexplainkernel_kernelfunc_batch_single(
         for(j=0; j<end; j++) { mmprofile[k][j] = 0; }
     }
 
-    clog_info(CLOG(LOGGER_ID), "Calling kmertree_dfs_withexplanation");
     kmertree_dfs_withexplanation(tree, end, 0, 0, matching_bases,
                                  num_matching_bases, mmprofile,
                                  persv_explanation);
@@ -1075,7 +1067,7 @@ static void gkmexplainkernel_kernelfunc_batch_single(
         for (k=0; k < da->seqlen; k++) {
             sum2 += persv_explanation[k][j];
         }
-        assert (sum==sum2);
+        assert (fabs(sum-sum2) < 0.0000001);
         res[j-start] = sum;
     }
 
@@ -1840,7 +1832,6 @@ double* gkmexplainkernel_kernelfunc_batch_sv(const gkm_data *da, double *res, do
     //initialize results
     for (j=0; j<g_sv_num; j++) { res[j] = 0; }
 
-    clog_info(CLOG(LOGGER_ID), "Calling gkmexplainkernel_kernelfunc_batch_single");
     gkmexplainkernel_kernelfunc_batch_single(da, g_sv_kmertree, 0, g_sv_num, res, persv_explanation);
 
     //normalization

@@ -87,7 +87,6 @@ double calculate_score_and_explanation(char *seq, double *explanation)
 
     x.d = gkmkernel_new_object(seq, NULL, 0);
 
-    clog_info(CLOG(LOGGER_ID), "Calling prediction and explanation");
     svm_predict_and_explain_values(model, x, &score, explanation);
 
     gkmkernel_delete_object(x.d);
