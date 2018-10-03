@@ -2632,6 +2632,8 @@ double svm_predict_and_explain_values(const svm_model *model, const svm_data x, 
 
     //initialize 2d array of per-sv explanation
     double **persv_explanation = (double **) malloc(sizeof(double*) * ((size_t) (seqlen))); 
+    clog_info(CLOG(LOGGER_ID), "persv_explanation size of l is %d",l);
+    clog_info(CLOG(LOGGER_ID), "nSV[0]+nSV[1] is %d",(model->nSV[0] + model->nSV[1]));
     for (i=0; i<seqlen; i++) {
         persv_explanation[i] = (double *) malloc(sizeof(double) * ((size_t) l));
         for(j=0; j<l; j++) { persv_explanation[i][j] = 0.0; }
@@ -2652,6 +2654,7 @@ double svm_predict_and_explain_values(const svm_model *model, const svm_data x, 
     {
         int nr_class = model->nr_class;
 
+        clog_info(CLOG(LOGGER_ID), "Calling gkmexplainkernel_kernelfunc_batch_sv");
         gkmexplainkernel_kernelfunc_batch_sv(x.d, kvalue, persv_explanation);
 
         int *start = Malloc(int,nr_class);
