@@ -2539,6 +2539,87 @@ double svm_get_svr_probability(const svm_model *model)
     }
 }
 
+double svm_predict_values(const svm_model *model, const svm_data x, double* dec_values)
+{
+    int i;
+
+    int l = model->l;
+    double *kvalue = Malloc(double,l);
+
+    if(model->param.svm_type == ONE_CLASS ||
+       model->param.svm_type == EPSILON_SVR ||
+       model->param.svm_type == NU_SVR)
+    {
+        assert (1==2); //I don't think this block is executed for gkm-svm
+        //since it isn't set up for one class stuff or regression stuff
+    }
+    else
+    {
+        int nr_class = model->nr_class;
+
+        //for speed-up
+        if ((nr_class == 2) && (model->param.kernel_type != EST_TRUNC_RBF) && (model->param.kernel_type != GKM_RBF) && (model->param.kernel_type != EST_TRUNC_PW_RBF)) {
+            dec_values[0] = gkmkernel_predict(x.d) - model->rho[0];
+
+            free(kvalue);
+
+            if(dec_values[0] > 0)
+                return model->label[0];
+            else
+                return model->label[1];
+        }
+
+        gkmkernel_kernelfunc_batch_sv(x.d, kvalue);
+
+        int *start = Malloc(int,nr_class);
+        start[0] = 0;
+        for(i=1;i<nr_class;i++)
+            start[i] = start[i-1]+model->nSV[i-1];
+
+        int *vote = Malloc(int,nr_class);
+        for(i=0;i<nr_class;i++)
+            vote[i] = 0;
+
+
+        int p=0;
+        for(i=0;i<nr_class;i++)
+            for(int j=i+1;j<nr_class;j++)
+            {
+                double sum = 0;
+                int si = start[i];
+                int sj = start[j];
+                int ci = model->nSV[i];
+                int cj = model->nSV[j];
+                
+                int k;
+                double *coef1 = model->sv_coef[j-1];
+                double *coef2 = model->sv_coef[i];
+                for(k=0;k<ci;k++)
+                    sum += coef1[si+k] * kvalue[si+k];
+                for(k=0;k<cj;k++)
+                    sum += coef2[sj+k] * kvalue[sj+k];
+                sum -= model->rho[p];
+                dec_values[p] = sum;
+
+                if(dec_values[p] > 0)
+                    ++vote[i];
+                else
+                    ++vote[j];
+                p++;
+            }
+
+        int vote_max_idx = 0;
+        for(i=1;i<nr_class;i++)
+            if(vote[i] > vote[vote_max_idx])
+                vote_max_idx = i;
+
+        free(kvalue);
+        free(start);
+        free(vote);
+        return model->label[vote_max_idx];
+    }
+}
+
 double svm_predict_and_explain_values(const svm_model *model, const svm_data x, double* dec_values, double *explanation)
 {
     int i;
@@ -2628,101 +2709,6 @@ double svm_predict_and_explain_values(const svm_model *model, const svm_data x, 
             free(persv_explanation[i]);
         }
         free(persv_explanation);
-        free(start);
-        free(vote);
-        return model->label[vote_max_idx];
-    }
-}
-
-double svm_predict_values(const svm_model *model, const svm_data x, double* dec_values)
-{
-    int i;
-
-    int l = model->l;
-    double *kvalue = Malloc(double,l);
-
-    if(model->param.svm_type == ONE_CLASS ||
-       model->param.svm_type == EPSILON_SVR ||
-       model->param.svm_type == NU_SVR)
-    {
-        double *sv_coef = model->sv_coef[0];
-        double sum = 0;
-
-        gkmkernel_kernelfunc_batch_sv(x.d, kvalue);
-
-        for(i=0;i<l;i++)
-            sum += sv_coef[i] * kvalue[i];
-        sum -= model->rho[0];
-        *dec_values = sum;
-
-        free(kvalue);
-
-        if(model->param.svm_type == ONE_CLASS)
-            return (sum>0)?1:-1;
-        else
-            return sum;
-    }
-    else
-    {
-        int nr_class = model->nr_class;
-
-        //for speed-up
-        if ((nr_class == 2) && (model->param.kernel_type != EST_TRUNC_RBF) && (model->param.kernel_type != GKM_RBF) && (model->param.kernel_type != EST_TRUNC_PW_RBF)) {
-            dec_values[0] = gkmkernel_predict(x.d) - model->rho[0];
-
-            free(kvalue);
-
-            if(dec_values[0] > 0)
-                return model->label[0];
-            else
-                return model->label[1];
-        } 
-
-        gkmkernel_kernelfunc_batch_sv(x.d, kvalue);
-
-        int *start = Malloc(int,nr_class);
-        start[0] = 0;
-        for(i=1;i<nr_class;i++)
-            start[i] = start[i-1]+model->nSV[i-1];
-
-        int *vote = Malloc(int,nr_class);
-        for(i=0;i<nr_class;i++)
-            vote[i] = 0;
-
-
-        int p=0;
-        for(i=0;i<nr_class;i++)
-            for(int j=i+1;j<nr_class;j++)
-            {
-                double sum = 0;
-                int si = start[i];
-                int sj = start[j];
-                int ci = model->nSV[i];
-                int cj = model->nSV[j];
-                
-                int k;
-                double *coef1 = model->sv_coef[j-1];
-                double *coef2 = model->sv_coef[i];
-                for(k=0;k<ci;k++)
-                    sum += coef1[si+k] * kvalue[si+k];
-                for(k=0;k<cj;k++)
-                    sum += coef2[sj+k] * kvalue[sj+k];
-                sum -= model->rho[p];
-                dec_values[p] = sum;
-
-                if(dec_values[p] > 0)
-                    ++vote[i];
-                else
-                    ++vote[j];
-                p++;
-            }
-
-        int vote_max_idx = 0;
-        for(i=1;i<nr_class;i++)
-            if(vote[i] > vote[vote_max_idx])
-                vote_max_idx = i;
-
-        free(kvalue);
         free(start);
         free(vote);
         return model->label[vote_max_idx];

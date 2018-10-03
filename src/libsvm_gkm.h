@@ -92,7 +92,7 @@ void gkmkernel_init_predict(union svm_data *sv, double *alpha, int nclass, int n
 double gkmkernel_predict(const gkm_data *d);
 
 int svm_save_model(const char *model_file_name, const struct svm_model *model);
-svm_model *svm_load_model(const char *model_file_name);
+svm_model *svm_load_model(const char *model_file_name, uint8_t force_nonlinear_init);
 
 
 #ifdef __cplusplus

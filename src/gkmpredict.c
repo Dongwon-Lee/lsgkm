@@ -220,8 +220,10 @@ int main(int argc, char **argv)
         exit(1);
     }
 
+    clog_info(CLOG(LOGGER_ID), "test log");
     clog_info(CLOG(LOGGER_ID), "load model %s", modelfile);
-    if((model=svm_load_model(modelfile))==0) {
+    uint8_t force_nonlinear_init = 0;
+    if((model=svm_load_model(modelfile, force_nonlinear_init))==0) {
         clog_error(CLOG(LOGGER_ID),"can't open model file %s", modelfile);
         exit(1);
     }

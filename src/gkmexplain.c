@@ -87,6 +87,7 @@ double calculate_score_and_explanation(char *seq, double *explanation)
 
     x.d = gkmkernel_new_object(seq, NULL, 0);
 
+    clog_info(CLOG(LOGGER_ID), "Calling prediction and explanation");
     svm_predict_and_explain_values(model, x, &score, explanation);
 
     gkmkernel_delete_object(x.d);
@@ -238,7 +239,8 @@ int main(int argc, char **argv)
     }
 
     clog_info(CLOG(LOGGER_ID), "load model %s", modelfile);
-    if((model=svm_load_model(modelfile))==0) {
+    uint8_t force_nonlinear_init = 1;
+    if((model=svm_load_model(modelfile, force_nonlinear_init))==0) {
         clog_error(CLOG(LOGGER_ID),"can't open model file %s", modelfile);
         exit(1);
     }
