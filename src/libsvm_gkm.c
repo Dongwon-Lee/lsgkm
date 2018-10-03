@@ -407,6 +407,113 @@ static void kmertree_delete_sequence(const KmerTree *tree, int seqid, const gkm_
 }
 */
 
+
+static void kmertree_dfs_withexplanation(const KmerTree *tree,
+    const int last_seqid, const int depth, const int curr_node_index,
+    const BaseMismatchCount *curr_matching_bases,
+    const int curr_num_matching_bases, int **mmprof,
+    double **persv_explanation,
+    uint8_t **base_kmer_match_history)
+{
+    int i, j;
+    int bid;
+
+    const int d = g_param->d; //for small speed-up
+    const int L = g_param->L;
+
+    if (depth == tree->depth - 1) {
+        KmerTreeLeaf *leaf = tree->leaf + (curr_node_index*MAX_ALPHABET_SIZE) - tree->node_count;
+        for (bid=1; bid<=MAX_ALPHABET_SIZE; bid++) {
+            leaf++;
+            if (leaf->count > 0) {
+                for (j=0; j<curr_num_matching_bases; j++) {
+                    const uint8_t currbase = *curr_matching_bases[j].bid;
+                    const uint8_t currbase_wt = curr_matching_bases[j].wt;
+                    const int currbase_mmcnt = curr_matching_bases[j].mmcnt;
+                    if (currbase == bid) {
+                        // matching
+                        base_kmer_match_history[j][depth] = 1;
+                        const int leaf_cnt = leaf->count;
+                        const KmerTreeLeafData *data = leaf->data;
+                        int *mmprof_mmcnt = mmprof[currbase_mmcnt];
+                        for (i=0; i<leaf_cnt; i++) { 
+                            if (data[i].seqid < last_seqid) {
+                                double to_distribute = (g_weights[currbase_mmcnt]*(data[i].wt*currbase_wt))/(L-currbase_mmcnt);
+                                int total_matches = 0
+                                for (k=0; k<L; k++) {
+                                    if (base_kmer_match_history[j][k] == 1) {
+                                        persv_explanation[data[i].seqid][j+k] += to_distribute;
+                                        total_matches += 1
+                                    } 
+                                } 
+                                assert (total_matches==(L-currbase_mmcnt))
+                                mmprof_mmcnt[data[i].seqid] += (data[i].wt*currbase_wt); 
+                            }
+                        }
+                    } else if (currbase_mmcnt < d) {
+                        // non-matching
+                        base_kmer_match_history[j][depth] = 0;
+                        const int leaf_cnt = leaf->count;
+                        const KmerTreeLeafData *data = leaf->data;
+                        int *mmprof_mmcnt = mmprof[currbase_mmcnt+1];
+                        for (i=0; i<leaf_cnt; i++) { 
+                            if (data[i].seqid < last_seqid) {
+                                double to_distribute = (g_weights[currbase_mmcnt+1]*(data[i].wt*currbase_wt))/(L-(currbase_mmcnt+1));
+                                for (k=0; k<L; k++) {
+                                    if (base_kmer_match_history[j][k] == 1) {
+                                        persv_explanation[data[i].seqid][j+k] += to_distribute;
+                                        total_matches += 1
+                                    } 
+                                } 
+                                assert (total_matches==(L-currbase_mmcnt))
+                                mmprof_mmcnt[data[i].seqid] += (data[i].wt*currbase_wt); 
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        int daughter_node_index = (curr_node_index*MAX_ALPHABET_SIZE);
+        for (bid=1; bid<=MAX_ALPHABET_SIZE; bid++) {
+            daughter_node_index++;
+            if (tree->node[daughter_node_index] > 0) {
+                BaseMismatchCount next_matching_bases[MAX_SEQ_LENGTH];
+                int next_num_matching_bases = 0;
+
+                for (j=0; j<curr_num_matching_bases; j++) {
+                    uint8_t *currbase_ptr = curr_matching_bases[j].bid;
+                    int currbase_mmcnt = curr_matching_bases[j].mmcnt;
+                    if (*currbase_ptr == bid) {
+                        // matching
+                        next_matching_bases[next_num_matching_bases].bid = currbase_ptr+1;
+                        next_matching_bases[next_num_matching_bases].wt = curr_matching_bases[j].wt;
+                        next_matching_bases[next_num_matching_bases].mmcnt = currbase_mmcnt;
+                        base_kmer_match_history[next_num_matching_bases][depth] = 1;
+                        next_num_matching_bases++;
+                    } else if (currbase_mmcnt < d) {
+                        // non-matching
+                        next_matching_bases[next_num_matching_bases].bid = currbase_ptr+1;
+                        next_matching_bases[next_num_matching_bases].wt = curr_matching_bases[j].wt;
+                        next_matching_bases[next_num_matching_bases].mmcnt = currbase_mmcnt+1;
+                        base_kmer_match_history[next_num_matching_bases][depth] = 0;
+                        next_num_matching_bases++;
+                    }
+                }
+
+                if (next_num_matching_bases > 0) {
+                    kmertree_dfs_withexplanation(tree, last_seqid, depth+1,
+                     daughter_node_index, next_matching_bases,
+                     next_num_matching_bases, mmprof,
+                     persv_explanation,
+                     base_kmer_match_history);
+                } 
+            }
+        }
+    }
+}
+
+
 static void kmertree_dfs(const KmerTree *tree, const int last_seqid, const int depth, const int curr_node_index, const BaseMismatchCount *curr_matching_bases, const int curr_num_matching_bases, int **mmprof)
 {
     int i, j;
@@ -906,7 +1013,10 @@ static void gkmkernel_kernelfunc_batch_single(const gkm_data *da, KmerTree *tree
     free(mmprofile);
 }
 
-static void gkmexplainkernel_kernelfunc_batch_single(const gkm_data *da, KmerTree *tree, const int start, const int end, double *res, double **persv_explanation) 
+static void gkmexplainkernel_kernelfunc_batch_single(
+    const gkm_data *da,
+    KmerTree *tree, const int start, const int end,
+    double *res, double **persv_explanation) 
 {
     int i, j, k;
     BaseMismatchCount matching_bases[MAX_SEQ_LENGTH];
@@ -926,13 +1036,27 @@ static void gkmexplainkernel_kernelfunc_batch_single(const gkm_data *da, KmerTre
         for(j=0; j<end; j++) { mmprofile[k][j] = 0; }
     }
 
-    kmertree_dfs(tree, end, 0, 0, matching_bases, num_matching_bases, mmprofile);
+    /* initialize base_kmer_match_history*/
+    uint8_t **base_kmer_match_history = (uint8_t **) malloc(sizeof(uint8_t*) * ((size_t) (da->seqlen)));
+    for (k=0; k < da->seqlen; k++) {
+        base_kmer_match_history[k] = (uint8_t *) malloc(sizeof(uint8_t) * ((size_t) g_param->L));
+    }
+
+    kmertree_dfs_withexplanation(tree, end, 0, 0, matching_bases,
+                                 num_matching_bases, mmprofile,
+                                 persv_explanation,
+                                 base_kmer_match_history);
 
     for (j=start; j<end; j++) {
         double sum = 0;
         for (k=0; k<=d; k++) {
             sum += (g_weights[k]*mmprofile[k][j]);
         }
+        double sum2 = 0;
+        for (k=0; k < da->seqlen; k++) {
+            sum2 += persv_explanation[k][j]
+        }
+        assert (sum==sum2)
         res[j-start] = sum;
     }
 
@@ -941,6 +1065,12 @@ static void gkmexplainkernel_kernelfunc_batch_single(const gkm_data *da, KmerTre
         free(mmprofile[k]);
     }
     free(mmprofile);
+
+    //free base_kmer_match_history
+    for (k=0; k < da->seqlen; k++) {
+        free(base_kmer_match_history[k]);
+    }
+    free(base_kmer_match_history);
 }
 
 static void gkmkernel_kernelfunc_batch_par4(const gkm_data *da, KmerTree *tree, const int start, const int end, double *res)
@@ -1689,7 +1819,11 @@ double* gkmexplainkernel_kernelfunc_batch_sv(const gkm_data *da, double *res, do
     //normalization
     double da_sqnorm = da->sqnorm;
     for (j=0; j<g_sv_num; j++) {
-        res[j] /= (da_sqnorm*g_sv_svm_data[j].d->sqnorm);
+        double denom = (da_sqnorm*g_sv_svm_data[j].d->sqnorm);
+        res[j] /= denom;
+        for (k=0; k<da->seqlen; k++) {
+            persv_explanation[k][j] /= denom;
+        } 
     }
 
     //RBF kernel
