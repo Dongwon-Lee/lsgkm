@@ -1829,7 +1829,20 @@ double* gkmexplainkernel_kernelfunc_batch_sv(const gkm_data *da, double *res, do
     //RBF kernel
     if (g_param->kernel_type == EST_TRUNC_RBF || g_param->kernel_type == EST_TRUNC_PW_RBF || g_param->kernel_type == GKM_RBF) {
         for (j=0; j<g_sv_num; j++) {
+            //let the reference be the case where res[j] = 0
             res[j] = exp(g_param->gamma*(res[j]-1));
+            double diff_from_ref = res[j] -  exp(g_param->gamma*(-1));
+            //distribute the difference from reference onto the bases
+            //compute the total importance
+            double per_sv_total = 0;
+            for (k=0; k<da->seqlen; k++) {
+                per_sv_total += persv_explanation[k][j]
+            } 
+            //distribute diff_from_ref proportionally
+            for (k=0; k<da->seqlen; k++) {
+                persv_explanation[k][j] = diff_from_ref*(
+                 persv_explanation[k][j]/per_sv_total)
+            } 
         }
     }
 
