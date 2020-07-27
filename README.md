@@ -153,4 +153,4 @@ You need to generate all possible non-redundant *k*-mers using the Python script
 The output of `lgkmpredict` can be directly used by the deltaSVM script `deltasvm.pl`
 available from our deltasvm website.
 
-Please email Dongwon Lee (dwlee AT jhu DOT edu) if you have any questions.
+** Please email Dongwon Lee (dongwon.lee AT childrens DOT harvard DOT edu) if you have any questions. **
