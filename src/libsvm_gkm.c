@@ -1,6 +1,6 @@
 /* libsvm_gkm.c
  *
- * Copyright (C) 2015 Dongwon Lee
+ * Copyright (C) 2020 Dongwon Lee
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -329,8 +329,9 @@ static void kmertree_add_sequence(const KmerTree *tree, int seqid, const gkm_dat
     int i, j, k;
     uint8_t *seqs[2] = {d->seq, d->seq_rc};
     uint8_t *wts[2] = {d->wt, d->wt_rc};
+    int RC = (g_param->norc==1) ? 1 : 2;
 
-    for (k=0; k<2; k++) {
+    for (k=0; k<RC; k++) {
         uint8_t *seq = seqs[k];
         uint8_t *wt = wts[k];
 
@@ -988,7 +989,8 @@ static int sequence2twobitids(const gkm_data *d, int *twobitids)
 {
     int i, j;
     uint8_t *seqs[2] = {d->seq, d->seq_rc};
-    int nids = (d->seqlen - g_param->L + 1) * 2;
+    int RC = (g_param->norc==1) ? 1 : 2;
+    int nids = (d->seqlen - g_param->L + 1) * RC;
 
     int mask=3;
     for (i=0; i<g_param->L-1; i++) {
@@ -996,7 +998,7 @@ static int sequence2twobitids(const gkm_data *d, int *twobitids)
     }
 
     int cnt = 0;
-    for (j=0; j<2; j++) { 
+    for (j=0; j<RC; j++) { 
         int twobitid=0;
         uint8_t *s = seqs[j];
         for (i=0; i<g_param->L-1; i++) {
@@ -1056,7 +1058,7 @@ static double gkmkernel_kernelfunc_sqnorm_single(const gkm_data *da)
     int i, j, k;
     int twobitids[MAX_SEQ_LENGTH*2*2];
     int wt[MAX_SEQ_LENGTH*2];
-    int nids = sequence2twobitids(da, twobitids);
+    int nids = sequence2twobitids(da, twobitids); 
     int nkmerids= (da->seqlen - g_param->L + 1);
     int d = g_param->d;
 
@@ -1260,36 +1262,7 @@ gkm_data* gkmkernel_new_object(char *seq, char *sid, int seqid)
         }
     }
     
-    /* gaussian weights */
-    /*
-    double bw = 150;
-    double gamma = log(0.5)/(bw*bw);
-    double scale = 4;
-
-    for (i=0; i<nkmerids; i++) { 
-        uint8_t wt = (uint8_t) floor(scale*exp(gamma*(center-i)*(center-i)+0.02) + 1);
-        d->wt[i] = wt;
-        d->wt_rc[nkmerids-i-1] = wt;
-    }
-    */
-
-    /* linear weights */
-    /*
-    double binsize = 50.0;
-    for (i=0; i<nkmerids; i++) { 
-        uint8_t wt = (uint8_t) floor((center - abs(center - i))/binsize + 1); 
-        d->wt[i] = wt;
-        d->wt_rc[nkmerids-i-1] = wt;
-    }
-    */
-
     /* calculate square root of the kernel(d,d) and store for normalization */
-    /*
-    double kern = gkmkernel_kernelfunc_raw(d, d);
-	clog_trace(CLOG(LOGGER_ID), "%d's kernel is %f", seqid, kern);
-    d->sqnorm = sqrt(kern);
-    */
-
     d->sqnorm = gkmkernel_kernelfunc_sqnorm(d);
 	clog_trace(CLOG(LOGGER_ID), "%d's sqnorm is %f", seqid, d->sqnorm);
 
@@ -1411,6 +1384,7 @@ void gkmkernel_init_problems(union svm_data *x, int n)
 static void gkmkernel_add_one_sv(gkm_data *sv_i, double sv_coef, int i, int nclass)
 {
     int j, k;
+    int RC = (g_param->norc==1) ? 1 : 2;
 
     if ((nclass == 2) &&
         (g_param->kernel_type != EST_TRUNC_RBF) &&
@@ -1421,7 +1395,7 @@ static void gkmkernel_add_one_sv(gkm_data *sv_i, double sv_coef, int i, int ncla
 
         int *kmerids[2] = {sv_i->kmerids, sv_i->kmerids_rc};
         uint8_t *wts[2] = {sv_i->wt, sv_i->wt_rc};
-        for (k=0; k<2; k++) {
+        for (k=0; k<RC; k++) {
             int *kmerid = kmerids[k];
             uint8_t *wt = wts[k];
             for (j=0; j<nkmerids; j++) {
@@ -1694,7 +1668,7 @@ void gkmkernel_set_num_threads(int n)
 {
     g_param_nthreads = n;
 
-    clog_info(CLOG(LOGGER_ID), "Number of threads is set to %d", n);
+    //clog_info(CLOG(LOGGER_ID), "Number of threads is set to %d", n);
 
     if (g_param_nthreads == 1) {
         gkmkernel_kernelfunc_batch_ptr = gkmkernel_kernelfunc_batch_single;
@@ -1738,6 +1712,7 @@ int svm_save_model(const char *model_file_name, const svm_model *model)
     fprintf(fp,"L %d\n", param.L);
     fprintf(fp,"k %d\n", param.k);
     fprintf(fp,"d %d\n", param.d);
+    fprintf(fp,"norc %d\n", param.norc);
 
     if ((param.kernel_type == EST_TRUNC_RBF) || (param.kernel_type == EST_TRUNC_PW_RBF)) {
         fprintf(fp,"gamma %g\n", param.gamma);
@@ -1843,6 +1818,7 @@ static bool read_model_header(FILE *fp, svm_model* model)
 {
     svm_parameter& param = model->param;
     char cmd[81];
+    param.norc = 0; // initialize this as zero for compatibility
     while(1)
     {
         FSCANF(fp,"%80s",cmd);
@@ -1889,6 +1865,8 @@ static bool read_model_header(FILE *fp, svm_model* model)
             FSCANF(fp,"%d",&param.k);
         else if(strcmp(cmd,"d")==0)
             FSCANF(fp,"%d",&param.d);
+        else if(strcmp(cmd,"norc")==0)
+            FSCANF(fp,"%d",&param.norc);
         else if(strcmp(cmd,"gamma")==0)
             FSCANF(fp,"%lf",&param.gamma);
         else if(strcmp(cmd,"M")==0)
@@ -2026,11 +2004,14 @@ svm_model *svm_load_model(const char *model_file_name)
         model->sv_coef[i] = Malloc(double,l);
     model->SV = Malloc(svm_data,l);
 
+    clog_info(CLOG(LOGGER_ID), "reading %d SVs", l);
     for(i=0;i<l;i++)
     {
+        /*
         if ((i > 0) && ((i % 1000) == 0)) {
             clog_info(CLOG(LOGGER_ID), "reading... %d/%d", i, l);
         }
+        */
 
         readline(fp);
         p = strtok(line, " \t");

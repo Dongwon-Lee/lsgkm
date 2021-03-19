@@ -59,6 +59,7 @@ struct svm_parameter
     uint8_t M;
     double H;
     double gamma;
+    int norc;
 
     /* these are for training only */
     double cache_size; /* in MB */

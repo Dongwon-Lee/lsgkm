@@ -1,6 +1,6 @@
 /* gkmtrain.c
  *
- * Copyright (C) 2015 Dongwon Lee
+ * Copyright (C) 2015-2021 Dongwon Lee
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -62,6 +62,7 @@ void print_usage_and_exit()
             " -H <float>   set the half-life parameter (H) that is the distance (D) required\n"
             "              to fall to half of its initial value in the exponential decay\n"
             "              function for wgkm-kernels. -t 4 or 5 only (default: 50)\n"
+            " -R           if set, reverse-complement is not considered as the same feature\n"
             " -c <float>   set the regularization parameter SVM-C (default: 1.0)\n"
             " -e <float>   set the precision parameter epsilon (default: 0.001)\n"
             " -w <float>   set the parameter SVM-C to w*C for the positive set (default: 1.0)\n"
@@ -156,6 +157,7 @@ int main(int argc, char** argv)
     param.nr_weight = 0;
     param.weight_label = (int *) malloc(sizeof(int)*1);
     param.weight = (double *) malloc(sizeof(double)*1);
+    param.norc = 0;
     param.p = 0.1; //not used
     param.probability = 0; //not used
     param.nu = 0.5; //not used
@@ -163,7 +165,7 @@ int main(int argc, char** argv)
     icv = 0;
 
 	int c;
-	while ((c = getopt (argc, argv, "t:l:k:d:g:M:H:c:e:w:m:x:i:r:sv:T:")) != -1) {
+	while ((c = getopt (argc, argv, "t:l:k:d:g:M:H:c:e:w:m:x:i:r:sv:T:R")) != -1) {
 		switch (c) {
             case 't':
                 param.kernel_type = atoi(optarg);
@@ -228,6 +230,9 @@ int main(int argc, char** argv)
             case 'T':
                 nthreads = atoi(optarg);
                 break;
+            case 'R':
+                param.norc = 1;
+                break;
 			default:
                 fprintf(stderr,"Unknown option: -%c\n", c);
                 print_usage_and_exit();
@@ -291,6 +296,7 @@ int main(int argc, char** argv)
     }
     clog_info(CLOG(LOGGER_ID), "  eps = %g", param.eps);
     clog_info(CLOG(LOGGER_ID), "  shrinking = %s", param.shrinking ? "yes" : "no");
+    clog_info(CLOG(LOGGER_ID), "  reverse-complement feature = %s", param.norc ? "no" : "yes");
 
     sprintf(model_file_name,"%s.model.txt", outprefix);
 
