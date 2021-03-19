@@ -73,6 +73,7 @@ positive sequence file, negative sequence file, and prefix of output.
      -H <float>   set the half-life parameter (H) that is the distance (D) required
                   to fall to half of its initial value in the exponential decay
                   function for wgkm-kernels. -t 4 or 5 only (default: 50)
+     -R           if set, reverse-complement is not considered as the same feature
      -c <float>   set the regularization parameter SVM-C (default: 1.0)
      -e <float>   set the precision parameter epsilon (default: 0.001)
      -w <float>   set the parameter SVM-C to w*C for the positive set (default: 1.0)
