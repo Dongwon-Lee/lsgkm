@@ -44,7 +44,7 @@ void print_usage_and_exit()
             "            <outprefix>.cvpred.txt\n"
             "\n"
             "Options:\n"
-            " -t <0 ~ 5>   set kernel function (default: 4 wgkm)\n"
+            " -t <0 ~ 5>   set kernel function (default: 2 gkm)\n"
             "              NOTE: RBF kernels (3 and 5) work best with -c 10 -g 2\n"
             "                0 -- gapped-kmer\n"
             "                1 -- estimated l-mer with full filter\n"
@@ -143,7 +143,7 @@ int main(int argc, char** argv)
 
     // default values
     param.svm_type = C_SVC;
-    param.kernel_type = EST_TRUNC_PW;
+    param.kernel_type = EST_TRUNC;
     param.L = 11;
     param.k = 7;
     param.d = 3;
