@@ -32,6 +32,10 @@ void print_usage_and_exit()
 {
     printf(
             "\n"
+            "Program: gkmpredict (lsgkm program for scoring sequences using a trained model)\n"
+            "Version: "
+            LSGKM_VERSION
+            "\n\n"
             "Usage: gkmpredict [options] <test_seqfile> <model_file> <output_file>\n"
             "\n"
             " score test sequences using trained gkm-SVM\n"

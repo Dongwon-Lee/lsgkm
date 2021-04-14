@@ -33,6 +33,10 @@ void print_usage_and_exit()
 {
     printf(
             "\n"
+            "Program: gkmtrain (lsgkm program for SVM model training)\n"
+            "Version: "
+            LSGKM_VERSION
+            "\n\n"
             "Usage: gkmtrain [options] <posfile> <negfile> <outprefix>\n"
             "\n"
             " train gkm-SVM using libSVM\n"
