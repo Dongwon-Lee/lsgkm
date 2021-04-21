@@ -3,13 +3,15 @@ CFLAGS = -Wall -Wconversion -O3 -fPIC
 #CFLAGS = -Wall -Wconversion -g -fPIC
 SHVER = 2
 
-all: gkmtrain gkmpredict
+all: gkmtrain gkmpredict gkmtrain-svr
 #all: gkmtrain gkmpredict gkmmatrix 
 
 gkmpredict: gkmpredict.c libsvm.o libsvm_gkm.o
 	$(CXX) $(CFLAGS) gkmpredict.c libsvm.o libsvm_gkm.o -o gkmpredict -lm -lpthread
 gkmtrain: gkmtrain.c libsvm.o libsvm_gkm.o
 	$(CXX) $(CFLAGS) gkmtrain.c libsvm.o libsvm_gkm.o -o gkmtrain -lm -lpthread
+gkmtrain-svr: gkmtrain_svr.c libsvm.o libsvm_gkm.o
+	$(CXX) $(CFLAGS) gkmtrain_svr.c libsvm.o libsvm_gkm.o -o gkmtrain-svr -lm -lpthread
 
 #for debug
 #gkmmatrix: gkmmatrix.c libsvm.o libsvm_gkm.o

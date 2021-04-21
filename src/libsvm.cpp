@@ -29,7 +29,7 @@
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * 
- * Modifications for LS-GKM (W) 2015 Dongwon Lee
+ * Modifications for LS-GKM (W) 2015-2021 Dongwon Lee
  */
 
 #include <math.h>
@@ -2552,12 +2552,20 @@ double svm_predict_values(const svm_model *model, const svm_data x, double* dec_
         double *sv_coef = model->sv_coef[0];
         double sum = 0;
 
-        gkmkernel_kernelfunc_batch_sv(x.d, kvalue);
+        //for speed-up
+        if ((model->nr_class == 2) && 
+                (model->param.kernel_type != EST_TRUNC_RBF) && 
+                (model->param.kernel_type != EST_TRUNC_PW_RBF)) {
+            dec_values[0] = gkmkernel_predict(x.d) - model->rho[0];
 
-        for(i=0;i<l;i++)
-            sum += sv_coef[i] * kvalue[i];
-        sum -= model->rho[0];
-        *dec_values = sum;
+        } else { 
+            gkmkernel_kernelfunc_batch_sv(x.d, kvalue);
+
+            for(i=0;i<l;i++)
+                sum += sv_coef[i] * kvalue[i];
+            sum -= model->rho[0];
+            *dec_values = sum;
+        }
 
         free(kvalue);
 
