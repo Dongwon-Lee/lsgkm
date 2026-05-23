@@ -1,0 +1,11 @@
+# Build artifacts
+src/*.o
+src/gkmtrain
+src/gkmtrain-svr
+src/gkmpredict
+src/gkmmatrix
+
+# Editor swap files
+*.swp
+*.swo
+*~

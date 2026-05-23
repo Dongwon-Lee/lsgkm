@@ -1562,7 +1562,7 @@ double* gkmkernel_kernelfunc_batch(const gkm_data *da, const union svm_data *db_
     }
 
     gettimeofday(&time_end, NULL);
-    clog_trace(CLOG(LOGGER_ID), "DFS n=%d (%ld ms)", n, diff_ms(time_end, time_start));
+    clog_debug(CLOG(LOGGER_ID), "DFS n=%d (%ld ms)", n, diff_ms(time_end, time_start));
 
     kmertree_cleanup(g_kmertree, 0, 0);
 

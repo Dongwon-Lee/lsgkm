@@ -100,6 +100,8 @@ static char* readline(FILE *input)
     return line;
 }
 
+int last_row_only = 0;
+
 int main(int argc, char** argv)
 {
     const char *error_msg;
@@ -124,6 +126,8 @@ int main(int argc, char** argv)
     param.L = 10;
     param.k = 6;
     param.d = 3;
+    param.M = 50;
+    param.H = 50;
     param.gamma = 1.0;
     param.cache_size = 100;
     param.C = 1;
@@ -137,7 +141,7 @@ int main(int argc, char** argv)
     param.nu = 0.5; //not used
 
 	int c;
-	while ((c = getopt (argc, argv, "t:l:k:d:g:v:T:")) != -1) {
+	while ((c = getopt (argc, argv, "t:l:k:d:g:v:T:L")) != -1) {
 		switch (c) {
             case 't':
                 param.kernel_type = atoi(optarg);
@@ -159,6 +163,9 @@ int main(int argc, char** argv)
                 break;
             case 'T':
                 nthreads = atoi(optarg);
+                break;
+            case 'L':
+                last_row_only = 1;
                 break;
 			default:
                 fprintf(stderr,"Unknown option: -%c\n", c);
@@ -210,6 +217,7 @@ int main(int argc, char** argv)
     clog_info(CLOG(LOGGER_ID), "  L = %d", param.L);
     clog_info(CLOG(LOGGER_ID), "  k = %d", param.k);
     clog_info(CLOG(LOGGER_ID), "  d = %d", param.d);
+    clog_info(CLOG(LOGGER_ID), "  nthreads = %d", nthreads);
     if (param.kernel_type == EST_TRUNC_RBF || param.kernel_type == EST_TRUNC_PW_RBF) {
         clog_info(CLOG(LOGGER_ID), "  gamma = %g", param.gamma);
     }
@@ -348,14 +356,22 @@ void get_matrix(const char *outkernel)
     }
 
     double *kvalue = (double *) malloc(sizeof(double) * ((size_t) l));
-    for (i=0;i<l;i++)
-    {
-        gkmkernel_kernelfunc_batch(prob.x[i].d, prob.x, i+1, kvalue);
-        for(j=0;j<=i;j++)
-        {
+    if (last_row_only) {
+        gkmkernel_kernelfunc_batch(prob.x[0].d, prob.x, l, kvalue);
+        for(j=0;j<l;j++) {
             fprintf(fp, "%g ", kvalue[j]);
         }
         fprintf(fp, "\n");
+    } else {
+        for (i=0;i<l;i++)
+        {
+            gkmkernel_kernelfunc_batch(prob.x[i].d, prob.x, i+1, kvalue);
+            for(j=0;j<=i;j++)
+            {
+                fprintf(fp, "%g ", kvalue[j]);
+            }
+            fprintf(fp, "\n");
+        }
     }
     free(kvalue);
 }
