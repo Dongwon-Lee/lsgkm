@@ -65,6 +65,9 @@ void print_usage_and_exit()
             "                4 -- progress msgs at finer-grained level (TRACE)\n"
             "-T <1|4|16>   set the number of threads for parallel calculation, 1, 4, or 16\n"
             "              (default: 1)\n"
+            " -L           write only the last row of the kernel matrix (all sequences\n"
+            "              vs. the final sequence) on a single line, instead of the\n"
+            "              full lower-triangular matrix\n"
             "\n");
 
 	exit(0);

@@ -27,8 +27,10 @@ If successful, You should be able to find the following executables in the curre
 
     gkmtrain
     gkmpredict
+    gkmtrain-svr
+    gkmmatrix
 
-`make install` will simply copy these two executables to the `../bin` direcory
+`make install` will simply copy these executables to the `../bin` direcory
 
 
 ### Tutorial
@@ -51,11 +53,12 @@ positive sequence file, negative sequence file, and prefix of output.
     Arguments:
      posfile: positive sequence file (FASTA format)
      negfile: negative sequence file (FASTA format)
-     outprefix: prefix of output file(s) <outprefix>.model.txt or
+     outprefix: prefix of output file(s) <outprefix>.model.txt
+                (or <outprefix>.model.txt.gz with -z) or
                 <outprefix>.cvpred.txt
 
     Options:
-     -t <0 ~ 5>   set kernel function (default: 4 wgkm)
+     -t <0 ~ 5>   set kernel function (default: 2 gkm)
                   NOTE: RBF kernels (3 and 5) work best with -c 10 -g 2
                     0 -- gapped-kmer
                     1 -- estimated l-mer with full filter
@@ -91,6 +94,7 @@ positive sequence file, negative sequence file, and prefix of output.
                     4 -- progress msgs at finer-grained level (TRACE)
     -T <1|4|16>   set the number of threads for parallel calculation, 1, 4, or 16
                      (default: 1)
+     -z           write the model as gzip-compressed (<outprefix>.model.txt.gz)
 
 
 First try to train a model using simple test files. Type the following command in `tests/` directory:
@@ -128,7 +132,7 @@ You use `gkmpredict` to score any set of sequences.
 
     Arguments:
      test_seqfile: sequence file for test (fasta format)
-     model_file: output of gkmtrain
+     model_file: output of gkmtrain (plain text or gzip-compressed; auto-detected)
      output_file: name of output file
 
     Options:
@@ -145,6 +149,60 @@ Here, you will try to score the positive and the negative test sequences. Type:
 
     $ ../bin/gkmpredict wgEncodeSydhTfbsGm12878Nfe2hStdAlnRep0.test.fa wgEncodeSydhTfbsGm12878Nfe2hStdAlnRep0.model.txt test_gkmpredict.txt
     $ ../bin/gkmpredict wgEncodeSydhTfbsGm12878Nfe2hStdAlnRep0.neg.test.fa wgEncodeSydhTfbsGm12878Nfe2hStdAlnRep0.model.txt test_gkmpredict.neg.txt
+
+
+#### Training a regression model (gkmtrain-svr)
+
+If your training data has continuous scores rather than positive/negative labels,
+use `gkmtrain-svr` to train a support vector regression (SVR) model. The input is a
+tab-delimited file with two columns: sequence and score.
+
+    Usage: gkmtrain-svr [options] <datafile> <outprefix>
+
+     train support vector regression (SVR) using gkm-kernel and libSVM
+
+    Arguments:
+     datafile: tab-delimited data file. The 1st column is sequence and
+               the 2nd column is score.
+     outprefix: prefix of output file(s) <outprefix>.model.txt
+                (or <outprefix>.model.txt.gz with -z) or
+                <outprefix>.cvpred.txt
+
+It accepts the same kernel/training options as `gkmtrain` (`-t`, `-l`, `-k`, `-d`,
+`-g`, `-M`, `-H`, `-R`, `-c`, `-e`, `-m`, `-s`, `-x`, `-i`, `-r`, `-v`, `-T`, `-z`),
+plus `-p <float>` to set the epsilon parameter in the SVR loss function (default: 0.1).
+The default regularization is `-c 0.1` (compared to `-c 1.0` for `gkmtrain`).
+The resulting `<outprefix>.model.txt` can be scored by `gkmpredict` exactly like a
+classifier model.
+
+
+#### Computing the kernel matrix directly (gkmmatrix)
+
+`gkmmatrix` computes the pairwise gkm kernel matrix for a set of sequences without
+training an SVM. This is useful for diagnostics or for plugging the kernel into
+external tools.
+
+    Usage: gkmmatrix [options] <pos_seqfile> <neg_seqfile> <output_kernel>
+
+     build kernel matrix of gkm-SVM
+
+    Arguments:
+     pos_seqfile: positive sequence file (fasta format)
+     neg_seqfile: negative sequence file (fasta format)
+     output_kernel: output kernel file
+
+    Options:
+     -t <0 ~ 5>   set type of kernel function (default: 2)
+     -l <int>     set word length, 3<=l<=12 (default: 10)
+     -k <int>     set number of informative column, k<=l (default: 6)
+     -d <int>     set maximum number of mismatches to consider, d<=4 (default: 3)
+     -g <float>   set gamma for RBF kernel (-t 3 or 5) (default: 1.0)
+     -L           write only the last row of the kernel matrix (all sequences
+                  vs. the final sequence) on a single line instead of the full
+                  lower-triangular matrix
+     -v <0 ~ 4>   set the level of verbosity (default: 2)
+    -T <1|4|16>   set the number of threads for parallel calculation, 1, 4, or 16
+                  (default: 1)
 
 
 #### Generating weight files for deltaSVM
