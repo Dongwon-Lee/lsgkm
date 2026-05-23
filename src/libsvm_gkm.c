@@ -25,6 +25,7 @@
 #include <pthread.h>
 #include <sys/time.h>
 #include <locale.h>
+#include <zlib.h>
 
 #include "libsvm_gkm.h"
 #include "clog.h"
@@ -1697,9 +1698,18 @@ static const char *kernel_type_table[]=
     "gkm_cnt", "gkm_estfull", "gkm_esttrunc", "gkmrbf", "wgkm", "wgkmrbf", NULL
 };
 
+/* True iff filename ends with ".gz" — selects gzip-compressed output. */
+static int has_gz_extension(const char *name)
+{
+    size_t n = strlen(name);
+    return n >= 3 && strcmp(name + n - 3, ".gz") == 0;
+}
+
 int svm_save_model(const char *model_file_name, const svm_model *model)
 {
-    FILE *fp = fopen(model_file_name,"w");
+    /* "wb" = gzip-compressed; "wbT" = transparent (plain text, no gzip header). */
+    const char *mode = has_gz_extension(model_file_name) ? "wb" : "wbT";
+    gzFile fp = gzopen(model_file_name, mode);
     if(fp==NULL) return -1;
 
     char *old_locale = strdup(setlocale(LC_ALL, NULL));
@@ -1707,92 +1717,92 @@ int svm_save_model(const char *model_file_name, const svm_model *model)
 
     const svm_parameter& param = model->param;
 
-    fprintf(fp,"svm_type %s\n", svm_type_table[param.svm_type]);
-    fprintf(fp,"kernel_type %s\n", kernel_type_table[param.kernel_type]);
-    fprintf(fp,"L %d\n", param.L);
-    fprintf(fp,"k %d\n", param.k);
-    fprintf(fp,"d %d\n", param.d);
-    fprintf(fp,"norc %d\n", param.norc);
+    gzprintf(fp,"svm_type %s\n", svm_type_table[param.svm_type]);
+    gzprintf(fp,"kernel_type %s\n", kernel_type_table[param.kernel_type]);
+    gzprintf(fp,"L %d\n", param.L);
+    gzprintf(fp,"k %d\n", param.k);
+    gzprintf(fp,"d %d\n", param.d);
+    gzprintf(fp,"norc %d\n", param.norc);
 
     if ((param.kernel_type == EST_TRUNC_RBF) || (param.kernel_type == EST_TRUNC_PW_RBF)) {
-        fprintf(fp,"gamma %g\n", param.gamma);
+        gzprintf(fp,"gamma %g\n", param.gamma);
     }
 
     if ((param.kernel_type == EST_TRUNC_PW) || (param.kernel_type == EST_TRUNC_PW_RBF)) {
-        fprintf(fp,"M %d\n", param.M);
-        fprintf(fp,"H %g\n", param.H);
+        gzprintf(fp,"M %d\n", param.M);
+        gzprintf(fp,"H %g\n", param.H);
     }
 
     int nr_class = model->nr_class;
     int l = model->l;
-    fprintf(fp, "nr_class %d\n", nr_class);
-    fprintf(fp, "total_sv %d\n",l);
+    gzprintf(fp, "nr_class %d\n", nr_class);
+    gzprintf(fp, "total_sv %d\n",l);
 
     {
-        fprintf(fp, "rho");
+        gzprintf(fp, "rho");
         for(int i=0;i<nr_class*(nr_class-1)/2;i++)
-            fprintf(fp," %g",model->rho[i]);
-        fprintf(fp, "\n");
+            gzprintf(fp," %g",model->rho[i]);
+        gzprintf(fp, "\n");
     }
 
     if(model->label)
     {
-        fprintf(fp, "label");
+        gzprintf(fp, "label");
         for(int i=0;i<nr_class;i++)
-            fprintf(fp," %d",model->label[i]);
-        fprintf(fp, "\n");
+            gzprintf(fp," %d",model->label[i]);
+        gzprintf(fp, "\n");
     }
 
     if(model->probA) // regression has probA only
     {
-        fprintf(fp, "probA");
+        gzprintf(fp, "probA");
         for(int i=0;i<nr_class*(nr_class-1)/2;i++)
-            fprintf(fp," %g",model->probA[i]);
-        fprintf(fp, "\n");
+            gzprintf(fp," %g",model->probA[i]);
+        gzprintf(fp, "\n");
     }
     if(model->probB)
     {
-        fprintf(fp, "probB");
+        gzprintf(fp, "probB");
         for(int i=0;i<nr_class*(nr_class-1)/2;i++)
-            fprintf(fp," %g",model->probB[i]);
-        fprintf(fp, "\n");
+            gzprintf(fp," %g",model->probB[i]);
+        gzprintf(fp, "\n");
     }
 
     if(model->nSV)
     {
-        fprintf(fp, "nr_sv");
+        gzprintf(fp, "nr_sv");
         for(int i=0;i<nr_class;i++)
-            fprintf(fp," %d",model->nSV[i]);
-        fprintf(fp, "\n");
+            gzprintf(fp," %d",model->nSV[i]);
+        gzprintf(fp, "\n");
     }
 
-    fprintf(fp, "SV\n");
+    gzprintf(fp, "SV\n");
     const double * const *sv_coef = model->sv_coef;
     const svm_data *SV = model->SV;
 
     for(int i=0;i<l;i++)
     {
         for(int j=0;j<nr_class-1;j++)
-            fprintf(fp, "%.16g ",sv_coef[j][i]);
+            gzprintf(fp, "%.16g ",sv_coef[j][i]);
 
-        fprintf(fp, "%s\n", SV[i].d->seq_string);
+        gzprintf(fp, "%s\n", SV[i].d->seq_string);
     }
 
     setlocale(LC_ALL, old_locale);
     free(old_locale);
 
-    if (ferror(fp) != 0 || fclose(fp) != 0) return -1;
+    if (gzclose(fp) != Z_OK) return -1;
     else return 0;
 }
 
 static char *line = NULL;
 static int max_line_len;
 
-static char* readline(FILE *input)
+static char* readline(gzFile input)
 {
     int len;
 
-    if(fgets(line,max_line_len,input) == NULL)
+    if(gzgets(input, line, max_line_len) == NULL)
         return NULL;
 
     while(strrchr(line,'\n') == NULL)
@@ -1800,32 +1810,68 @@ static char* readline(FILE *input)
         max_line_len *= 2;
         line = (char *) realloc(line,(size_t) max_line_len);
         len = (int) strlen(line);
-        if(fgets(line+len,max_line_len-len,input) == NULL)
+        if(gzgets(input, line+len, max_line_len-len) == NULL)
             break;
     }
     return line;
 }
 
-//
-// FSCANF helps to handle fscanf failures.
-// Its do-while block avoids the ambiguity when
-// if (...)
-//    FSCANF();
-// is used
-//
-#define FSCANF(_stream, _format, _var) do{ if (fscanf(_stream, _format, _var) != 1) return false; }while(0)
-static bool read_model_header(FILE *fp, svm_model* model)
+/* Token-based scanning helpers for gzFile — mimic fscanf("%s"/"%d"/"%lf"). */
+static int gz_skip_ws(gzFile fp)
+{
+    int c;
+    do {
+        c = gzgetc(fp);
+    } while (c != -1 && isspace(c));
+    return c;
+}
+
+/* Read a whitespace-delimited token; pushes back the trailing whitespace
+ * (matches fscanf("%s") behavior so following getc()/loops see the delim). */
+static int gz_read_token(gzFile fp, char *buf, int bufsize)
+{
+    int c = gz_skip_ws(fp);
+    if (c == -1) return 0;
+    int i = 0;
+    do {
+        if (i < bufsize - 1) buf[i++] = (char)c;
+        c = gzgetc(fp);
+    } while (c != -1 && !isspace(c));
+    buf[i] = '\0';
+    if (c != -1) gzungetc(c, fp);
+    return 1;
+}
+
+static int gz_read_int(gzFile fp, int *out)
+{
+    char buf[64];
+    if (!gz_read_token(fp, buf, sizeof(buf))) return 0;
+    return sscanf(buf, "%d", out) == 1;
+}
+
+static int gz_read_double(gzFile fp, double *out)
+{
+    char buf[64];
+    if (!gz_read_token(fp, buf, sizeof(buf))) return 0;
+    return sscanf(buf, "%lf", out) == 1;
+}
+
+#define GZSCAN_STR(_fp, _buf)  do{ if (!gz_read_token(_fp, _buf, 81)) return false; }while(0)
+#define GZSCAN_INT(_fp, _var)  do{ if (!gz_read_int(_fp, _var)) return false; }while(0)
+#define GZSCAN_DBL(_fp, _var)  do{ if (!gz_read_double(_fp, _var)) return false; }while(0)
+
+static bool read_model_header(gzFile fp, svm_model* model)
 {
     svm_parameter& param = model->param;
     char cmd[81];
     param.norc = 0; // initialize this as zero for compatibility
     while(1)
     {
-        FSCANF(fp,"%80s",cmd);
+        GZSCAN_STR(fp, cmd);
 
         if(strcmp(cmd,"svm_type")==0)
         {
-            FSCANF(fp,"%80s",cmd);
+            GZSCAN_STR(fp, cmd);
             int i;
             for(i=0;svm_type_table[i];i++)
             {
@@ -1843,7 +1889,7 @@ static bool read_model_header(FILE *fp, svm_model* model)
         }
         else if(strcmp(cmd,"kernel_type")==0)
         {
-            FSCANF(fp,"%80s",cmd);
+            GZSCAN_STR(fp, cmd);
             int i;
             for(i=0;kernel_type_table[i];i++)
             {
@@ -1860,68 +1906,68 @@ static bool read_model_header(FILE *fp, svm_model* model)
             }
         }
         else if(strcmp(cmd,"L")==0)
-            FSCANF(fp,"%d",&param.L);
+            GZSCAN_INT(fp, &param.L);
         else if(strcmp(cmd,"k")==0)
-            FSCANF(fp,"%d",&param.k);
+            GZSCAN_INT(fp, &param.k);
         else if(strcmp(cmd,"d")==0)
-            FSCANF(fp,"%d",&param.d);
+            GZSCAN_INT(fp, &param.d);
         else if(strcmp(cmd,"norc")==0)
-            FSCANF(fp,"%d",&param.norc);
+            GZSCAN_INT(fp, &param.norc);
         else if(strcmp(cmd,"gamma")==0)
-            FSCANF(fp,"%lf",&param.gamma);
+            GZSCAN_DBL(fp, &param.gamma);
         else if(strcmp(cmd,"M")==0)
         {
             int tmpM;
-            FSCANF(fp,"%d",&tmpM);
+            GZSCAN_INT(fp, &tmpM);
             param.M = (uint8_t) tmpM;
         }
         else if(strcmp(cmd,"H")==0)
-            FSCANF(fp,"%lf",&param.H);
+            GZSCAN_DBL(fp, &param.H);
         else if(strcmp(cmd,"nr_class")==0)
-            FSCANF(fp,"%d",&model->nr_class);
+            GZSCAN_INT(fp, &model->nr_class);
         else if(strcmp(cmd,"total_sv")==0)
-            FSCANF(fp,"%d",&model->l);
+            GZSCAN_INT(fp, &model->l);
         else if(strcmp(cmd,"rho")==0)
         {
             int n = model->nr_class * (model->nr_class-1)/2;
             model->rho = Malloc(double,n);
             for(int i=0;i<n;i++)
-                FSCANF(fp,"%lf",&model->rho[i]);
+                GZSCAN_DBL(fp, &model->rho[i]);
         }
         else if(strcmp(cmd,"label")==0)
         {
             int n = model->nr_class;
             model->label = Malloc(int,n);
             for(int i=0;i<n;i++)
-                FSCANF(fp,"%d",&model->label[i]);
+                GZSCAN_INT(fp, &model->label[i]);
         }
         else if(strcmp(cmd,"probA")==0)
         {
             int n = model->nr_class * (model->nr_class-1)/2;
             model->probA = Malloc(double,n);
             for(int i=0;i<n;i++)
-                FSCANF(fp,"%lf",&model->probA[i]);
+                GZSCAN_DBL(fp, &model->probA[i]);
         }
         else if(strcmp(cmd,"probB")==0)
         {
             int n = model->nr_class * (model->nr_class-1)/2;
             model->probB = Malloc(double,n);
             for(int i=0;i<n;i++)
-                FSCANF(fp,"%lf",&model->probB[i]);
+                GZSCAN_DBL(fp, &model->probB[i]);
         }
         else if(strcmp(cmd,"nr_sv")==0)
         {
             int n = model->nr_class;
             model->nSV = Malloc(int,n);
             for(int i=0;i<n;i++)
-                FSCANF(fp,"%d",&model->nSV[i]);
+                GZSCAN_INT(fp, &model->nSV[i]);
         }
         else if(strcmp(cmd,"SV")==0)
         {
             while(1)
             {
-                int c = getc(fp);
-                if(c==EOF || c=='\n') break;
+                int c = gzgetc(fp);
+                if(c==-1 || c=='\n') break;
             }
             break;
         }
@@ -1937,9 +1983,11 @@ static bool read_model_header(FILE *fp, svm_model* model)
 }
 
 // load a model with gkmtree initialization
+// Accepts both plain text and gzip-compressed model files; gzopen
+// auto-detects the gzip header and passes plain files through unchanged.
 svm_model *svm_load_model(const char *model_file_name)
 {
-    FILE *fp = fopen(model_file_name,"rb");
+    gzFile fp = gzopen(model_file_name,"rb");
     if(fp==NULL) return NULL;
 
     char *old_locale = strdup(setlocale(LC_ALL, NULL));
@@ -1957,13 +2005,14 @@ svm_model *svm_load_model(const char *model_file_name)
     // read header
     if (!read_model_header(fp, model))
     {
-        clog_error(CLOG(LOGGER_ID), "fscanf failed to read model");
+        clog_error(CLOG(LOGGER_ID), "failed to read model header");
         setlocale(LC_ALL, old_locale);
         free(old_locale);
         free(model->rho);
         free(model->label);
         free(model->nSV);
         free(model);
+        gzclose(fp);
         return NULL;
     }
 
@@ -1975,7 +2024,7 @@ svm_model *svm_load_model(const char *model_file_name)
 
     // read sv_coef and SV
     int elements = 0;
-    long pos = ftell(fp);
+    z_off_t pos = gztell(fp);
 
     max_line_len = 1024;
     line = Malloc(char,max_line_len);
@@ -1994,7 +2043,7 @@ svm_model *svm_load_model(const char *model_file_name)
     }
     elements += model->l;
 
-    fseek(fp,pos,SEEK_SET);
+    gzseek(fp,pos,SEEK_SET);
 
     int m = model->nr_class - 1;
     int l = model->l;
@@ -2036,7 +2085,7 @@ svm_model *svm_load_model(const char *model_file_name)
     setlocale(LC_ALL, old_locale);
     free(old_locale);
 
-    if (ferror(fp) != 0 || fclose(fp) != 0)
+    if (gzclose(fp) != Z_OK)
         return NULL;
 
     model->free_sv = 1; // XXX

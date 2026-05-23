@@ -7,15 +7,15 @@ all: gkmtrain gkmpredict gkmmatrix gkmtrain-svr
 #all: gkmtrain gkmpredict gkmmatrix 
 
 gkmpredict: gkmpredict.c libsvm.o libsvm_gkm.o
-	$(CXX) $(CFLAGS) gkmpredict.c libsvm.o libsvm_gkm.o -o gkmpredict -lm -lpthread
+	$(CXX) $(CFLAGS) gkmpredict.c libsvm.o libsvm_gkm.o -o gkmpredict -lm -lpthread -lz
 gkmtrain: gkmtrain.c libsvm.o libsvm_gkm.o
-	$(CXX) $(CFLAGS) gkmtrain.c libsvm.o libsvm_gkm.o -o gkmtrain -lm -lpthread
+	$(CXX) $(CFLAGS) gkmtrain.c libsvm.o libsvm_gkm.o -o gkmtrain -lm -lpthread -lz
 gkmtrain-svr: gkmtrain_svr.c libsvm.o libsvm_gkm.o
-	$(CXX) $(CFLAGS) gkmtrain_svr.c libsvm.o libsvm_gkm.o -o gkmtrain-svr -lm -lpthread
+	$(CXX) $(CFLAGS) gkmtrain_svr.c libsvm.o libsvm_gkm.o -o gkmtrain-svr -lm -lpthread -lz
 
 #for debug
 gkmmatrix: gkmmatrix.c libsvm.o libsvm_gkm.o
-	$(CXX) $(CFLAGS) gkmmatrix.c libsvm.o libsvm_gkm.o -o gkmmatrix -lm -lpthread
+	$(CXX) $(CFLAGS) gkmmatrix.c libsvm.o libsvm_gkm.o -o gkmmatrix -lm -lpthread -lz
 
 libsvm.o: libsvm.cpp libsvm.h
 	$(CXX) $(CFLAGS) -c libsvm.cpp

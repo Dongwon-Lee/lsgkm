@@ -84,6 +84,7 @@ void print_usage_and_exit()
             "                4 -- progress msgs at finer-grained level (TRACE)\n"
             "-T <1|4|16>   set the number of threads for parallel calculation, 1, 4, or 16\n"
             "                 (default: 1)\n"
+            " -z           write the model as gzip-compressed (<outprefix>.model.txt.gz)\n"
             "\n");
 
 	exit(0);
@@ -133,6 +134,7 @@ int main(int argc, char** argv)
     int nthreads = 1;
 	int rseed = 1;
     int tmpM;
+    int gzip_model = 0;
 
     /* Initialize the logger */
     if (clog_init_fd(LOGGER_ID, 1) != 0) {
@@ -169,7 +171,7 @@ int main(int argc, char** argv)
     icv = 0;
 
 	int c;
-	while ((c = getopt (argc, argv, "t:l:k:d:g:M:H:c:e:w:m:x:i:r:sv:T:R")) != -1) {
+	while ((c = getopt (argc, argv, "t:l:k:d:g:M:H:c:e:w:m:x:i:r:sv:T:Rz")) != -1) {
 		switch (c) {
             case 't':
                 param.kernel_type = atoi(optarg);
@@ -237,6 +239,9 @@ int main(int argc, char** argv)
             case 'R':
                 param.norc = 1;
                 break;
+            case 'z':
+                gzip_model = 1;
+                break;
 			default:
                 fprintf(stderr,"Unknown option: -%c\n", c);
                 print_usage_and_exit();
@@ -302,7 +307,7 @@ int main(int argc, char** argv)
     clog_info(CLOG(LOGGER_ID), "  shrinking = %s", param.shrinking ? "yes" : "no");
     clog_info(CLOG(LOGGER_ID), "  reverse-complement feature = %s", param.norc ? "no" : "yes");
 
-    sprintf(model_file_name,"%s.model.txt", outprefix);
+    sprintf(model_file_name,"%s.model.txt%s", outprefix, gzip_model ? ".gz" : "");
 
     if (cross_validation) {
         srand((unsigned int) rseed);
